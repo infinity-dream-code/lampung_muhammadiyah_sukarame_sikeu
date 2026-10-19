@@ -219,17 +219,24 @@ class UploadTagihanExcelController extends Controller
             return response()->json(['message' => 'Silahkan import data tagihan terlebih dahulu'], 422);
         }
 
-        $bta = $request->filled('periode_bulan')
-            ? sprintf('%04d%02d', (int) $request->periode_tahun, (int) $request->periode_bulan)
-            : sprintf('%04d', (int) $request->periode_tahun);
-
         $tagihan = mst_tagihan::where('urut', $request->tagihan)->first();
         if (!$tagihan) {
             return response()->json(['message' => 'Tagihan tidak ditemukan, silahkan muat ulang halaman!'], 422);
         }
 
         $nmTagihan = trim((string) $tagihan->tagihan);
+        $isSpp = str_contains(strtoupper($nmTagihan), 'SPP');
         $isNyicil = (string) ((int) ($tagihan->isINSTALLMENT ?? 0));
+
+        // SPP: tahun+bulan (202609). Selain SPP: tahun saja (2026).
+        if ($isSpp) {
+            if (!$request->filled('periode_bulan')) {
+                return response()->json(['message' => 'Untuk tagihan SPP, periode bulan wajib diisi.'], 422);
+            }
+            $bta = sprintf('%04d%02d', (int) $request->periode_tahun, (int) $request->periode_bulan);
+        } else {
+            $bta = sprintf('%04d', (int) $request->periode_tahun);
+        }
 
         try {
             $skippedInactive = [];
