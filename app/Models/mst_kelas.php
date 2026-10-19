@@ -55,11 +55,17 @@ class mst_kelas extends Model
      * Excel UNIT   = mst_kelas.unit
      * Excel KELAS  = mst_kelas.jenjang (7 / VII)
      * Excel KELOMPOK = mst_kelas.kelas (A / B / A1)
-     * Sekolah (mst_sekolah) dipilih terpisah saat Simpan Data.
+     * Sekolah (mst_sekolah) dipilih terpisah saat Simpan Data (filter mst_kelas.kelompok = CODE01).
      */
-    public static function findForImport(?string $unit, mixed $jenjang, ?string $kelompok): ?self
+    public static function findForImport(?string $unit, mixed $jenjang, ?string $kelompok, ?string $schoolCode = null): ?self
     {
-        return self::matchFromCollection(self::query()->get(), $unit, $jenjang, $kelompok);
+        $query = self::query();
+        $schoolCode = trim((string) $schoolCode);
+        if ($schoolCode !== '') {
+            $query->where('kelompok', $schoolCode);
+        }
+
+        return self::matchFromCollection($query->get(), $unit, $jenjang, $kelompok);
     }
 
     /**

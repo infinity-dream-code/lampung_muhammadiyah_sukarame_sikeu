@@ -176,6 +176,21 @@
                                     </select>
                                 </div>
                             </div>
+                            <div class="row mb-3" id="sekolah_wrap">
+                                <div class="col">
+                                    <label class="form-label" for="sekolah">Sekolah <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="sekolah" name="sekolah" data-control="select2" data-placeholder="Pilih sekolah" required>
+                                        <option value=""></option>
+                                        @isset($sekolah)
+                                            @foreach($sekolah as $item)
+                                                <option value="{{ $item->CODE01 }}">{{ $item->DESC01 }}</option>
+                                            @endforeach
+                                        @endisset
+                                    </select>
+                                    <div class="form-text">Siswa disimpan ke sekolah ini. Bukan dari kolom UNIT di Excel.</div>
+                                    <div class="invalid-feedback" role="alert"><strong></strong></div>
+                                </div>
+                            </div>
                         </fieldset>
                     </div>
                     <div class="modal-footer ">

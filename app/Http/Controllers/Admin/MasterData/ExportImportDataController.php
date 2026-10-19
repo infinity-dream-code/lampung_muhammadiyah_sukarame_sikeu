@@ -9,12 +9,15 @@ use App\Models\mst_sekolah;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use App\Support\InputSiswaProcedure;
+use App\Support\SchoolScope;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException as FormValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
 use Maatwebsite\Excel\Validators\ValidationException;
@@ -33,6 +36,7 @@ class ExportImportDataController extends Controller
         $data['dataTitle'] = $this->dataTitle;
         $data['columnsUrl'] = route('admin.master-data.export-import-data.get-column');
         $data['datasUrl'] = route('admin.master-data.export-import-data.get-data');
+        $data['sekolah'] = $this->sekolahOptions();
 
         return view('admin.master_data.export_import_data.index', $data);
     }
@@ -212,12 +216,17 @@ class ExportImportDataController extends Controller
     {
         $rules = [
             'metode' => ['required', 'in:1,2,3,4'],
+            'sekolah' => ['required_if:metode,1,2', 'nullable', 'string'],
         ];
 
         $request->validate(
             $rules,
-            ValidationMessage::messages(),
-            ValidationMessage::attributes()
+            array_merge(ValidationMessage::messages(), [
+                'sekolah.required_if' => 'Pilih sekolah tujuan penyimpanan.',
+            ]),
+            array_merge(ValidationMessage::attributes(), [
+                'sekolah' => 'sekolah',
+            ])
         );
 
         $data = Cache::get($this->cacheKey);
@@ -226,6 +235,9 @@ class ExportImportDataController extends Controller
         }
 
         $connection = DB::connection('DATA_MYSQL');
+        $sekolah = in_array((string) $request->metode, ['1', '2'], true)
+            ? $this->resolveSekolahFromRequest($request)
+            : null;
 
         try {
             if ($request->metode != '1') {
@@ -271,12 +283,14 @@ class ExportImportDataController extends Controller
                         $item['unit'] ?? null,
                         $item['kelas'] ?? null,
                         $item['kelompok'] ?? null,
+                        (string) $sekolah->CODE01,
                     );
                     if (!$matchedKelas) {
                         return response()->json([
                             'message' => sprintf(
-                                'Kelas tidak ditemukan di Master Kelas untuk NIS %s (Unit: %s, Kelas: %s, Kelompok: %s). Tambahkan dulu di menu Master Kelas (mis. unit MTS).',
+                                'Kelas tidak ditemukan di Master Kelas untuk NIS %s (Sekolah: %s, Unit: %s, Kelas: %s, Kelompok: %s). Tambahkan dulu di menu Master Kelas.',
                                 $nis,
+                                $sekolah->DESC01 ?? $sekolah->CODE01,
                                 $item['unit'] ?? '-',
                                 $item['kelas'] ?? '-',
                                 $item['kelompok'] ?? '-',
@@ -289,7 +303,7 @@ class ExportImportDataController extends Controller
                         (string) ($item['nama'] ?? ''),
                         (string) ($matchedKelas->jenjang ?? $kelasText),
                         (string) ($matchedKelas->unit ?? ($item['unit'] ?? '')),
-                        (string) ($matchedKelas->kelompok ?? ''),
+                        (string) $sekolah->CODE01,
                         (string) ($matchedKelas->kelas ?? ($item['kelompok'] ?? '')),
                         (string) ($item['angkatan'] ?? ''),
                         $item['alamat'] ?? null,
@@ -297,8 +311,8 @@ class ExportImportDataController extends Controller
                         $this->resolveOrtuForDb($item),
                     );
 
-                    // Procedure InputSiswa tidak mengisi DESC01 — lengkapi dari Master Sekolah
-                    $this->syncDesc01AfterInputSiswa($nis, $item['unit'] ?? null, $matchedKelas);
+                    // Procedure InputSiswa tidak mengisi DESC01 — lengkapi dari sekolah yang dipilih
+                    $this->syncDesc01AfterInputSiswa($nis, $sekolah);
 
                     // Jika kolom NODAFTAR terisi, simpan juga ke NUM2ND (boleh sama dengan NIS)
                     $nodaftar = trim((string) ($item['nodaftar'] ?? ''));
@@ -345,14 +359,16 @@ class ExportImportDataController extends Controller
                         $item['unit'] ?? null,
                         $item['kelas'] ?? null,
                         $item['kelompok'] ?? null,
+                        (string) $sekolah->CODE01,
                     );
                     if (!$matchedKelas) {
                         $connection->rollBack();
 
                         return response()->json([
                             'message' => sprintf(
-                                'Kelas tidak ditemukan di Master Kelas untuk No Pendaftaran %s (Unit: %s, Kelas: %s, Kelompok: %s).',
+                                'Kelas tidak ditemukan di Master Kelas untuk No Pendaftaran %s (Sekolah: %s, Unit: %s, Kelas: %s, Kelompok: %s).',
                                 $item['nodaftar'],
+                                $sekolah->DESC01 ?? $sekolah->CODE01,
                                 $item['unit'] ?? '-',
                                 $item['kelas'] ?? '-',
                                 $item['kelompok'] ?? '-',
@@ -375,9 +391,9 @@ class ExportImportDataController extends Controller
                         // Simpan sebagai nodaftar: NOCUST tetap '-' meski kolom NIS terisi (boleh nilai sama)
                         $createItem = $item;
                         $createItem['nis'] = null;
-                        scctcust::create($this->buildScctcustPayload($createItem, false, null, $matchedKelas));
+                        scctcust::create($this->buildScctcustPayload($createItem, false, null, $matchedKelas, $sekolah));
                     } else {
-                        $payload = $this->buildScctcustPayload($item, true, $existingCust, $matchedKelas);
+                        $payload = $this->buildScctcustPayload($item, true, $existingCust, $matchedKelas, $sekolah);
                         $payload['NOCUST'] = '-';
                         $payload['NUM2ND'] = $existingCust->NUM2ND;
                         $existingCust->update($payload);
@@ -542,6 +558,11 @@ class ExportImportDataController extends Controller
             Cache::forget($this->cacheKey);
 
             return response()->json(['message' => 'Sukses, data siswa telah disimpan, silahkan periksa kembali'], 200);
+        } catch (FormValidationException $e) {
+            if ($connection->transactionLevel() > 0) {
+                $connection->rollBack();
+            }
+            throw $e;
         } catch (\Throwable $e) {
             if ($connection->transactionLevel() > 0) {
                 $connection->rollBack();
@@ -623,76 +644,65 @@ class ExportImportDataController extends Controller
         return $second !== '' ? $second : null;
     }
 
-    private function resolveSekolahForImport(?string $unit, ?mst_kelas $kelas): ?mst_sekolah
+    /** @return \Illuminate\Support\Collection<int, mst_sekolah> */
+    private function sekolahOptions()
     {
-        // Prioritas: kode sekolah dari mst_kelas.kelompok (angka, mis. 104/105)
-        $schoolCode = trim((string) ($kelas->kelompok ?? ''));
-        if ($schoolCode !== '' && preg_match('/^\d+$/', $schoolCode)) {
-            $byCode = mst_sekolah::query()->where('CODE01', $schoolCode)->first();
-            if ($byCode) {
-                return $byCode;
-            }
+        $query = mst_sekolah::query()->select('CODE01', 'DESC01')->orderBy('DESC01');
+        $code = SchoolScope::codeFromUser(Auth::user());
+        if ($code !== null) {
+            $query->where('CODE01', $code);
         }
 
-        $unit = trim((string) $unit);
-        if ($unit !== '') {
-            $byUnit = mst_sekolah::query()
-                ->where(function ($query) use ($unit) {
-                    $query->where('DESC01', 'like', '%'.$unit.'%')
-                        ->orWhere('CODE01', $unit)
-                        ->orWhereRaw('UPPER(TRIM(DESC01)) = ?', [strtoupper($unit)]);
-                })
-                ->first();
-
-            if ($byUnit) {
-                return $byUnit;
-            }
-        }
-
-        if (!$kelas) {
-            return null;
-        }
-
-        $kelasUnit = trim((string) ($kelas->unit ?? ''));
-        if ($kelasUnit === '') {
-            return null;
-        }
-
-        return mst_sekolah::query()
-            ->where(function ($query) use ($kelasUnit) {
-                $query->where('DESC01', 'like', '%'.$kelasUnit.'%')
-                    ->orWhere('CODE01', $kelasUnit)
-                    ->orWhereRaw('UPPER(TRIM(DESC01)) = ?', [strtoupper($kelasUnit)]);
-            })
-            ->first();
+        return $query->get();
     }
 
-    /** Lengkapi DESC01 (+ CODE01 jika perlu) setelah CALL InputSiswa. */
-    private function syncDesc01AfterInputSiswa(string $nis, ?string $unit, mst_kelas $kelas): void
+    private function resolveSekolahFromRequest(Request $request): mst_sekolah
     {
-        $sekolah = $this->resolveSekolahForImport($unit, $kelas);
-        if (!$sekolah) {
-            return;
+        $code = trim((string) $request->input('sekolah', ''));
+        if ($code === '') {
+            throw FormValidationException::withMessages([
+                'sekolah' => ['Pilih sekolah tujuan penyimpanan.'],
+            ]);
         }
 
+        $query = mst_sekolah::query()->where('CODE01', $code);
+        $scoped = SchoolScope::codeFromUser(Auth::user());
+        if ($scoped !== null) {
+            $query->where('CODE01', $scoped);
+        }
+
+        $sekolah = $query->first();
+        if (!$sekolah) {
+            throw FormValidationException::withMessages([
+                'sekolah' => ['Sekolah tidak ditemukan di Master Sekolah.'],
+            ]);
+        }
+
+        return $sekolah;
+    }
+
+    /** Lengkapi DESC01 + CODE01 setelah CALL InputSiswa dari sekolah yang dipilih. */
+    private function syncDesc01AfterInputSiswa(string $nis, mst_sekolah $sekolah): void
+    {
         $cust = scctcust::where('NOCUST', $nis)->first();
         if (!$cust) {
             return;
         }
 
-        $updates = [];
-        $desc01 = trim((string) ($sekolah->DESC01 ?? ''));
-        if ($desc01 !== '' && trim((string) ($cust->DESC01 ?? '')) === '') {
-            $updates['DESC01'] = $desc01;
+        $updates = [
+            'CODE01' => trim((string) ($sekolah->CODE01 ?? '')),
+            'DESC01' => trim((string) ($sekolah->DESC01 ?? '')),
+            'LastUpdate' => Carbon::now(),
+        ];
+
+        if ($updates['CODE01'] === '') {
+            unset($updates['CODE01']);
+        }
+        if ($updates['DESC01'] === '') {
+            unset($updates['DESC01']);
         }
 
-        $code01 = trim((string) ($sekolah->CODE01 ?? ''));
-        if ($code01 !== '' && (trim((string) ($cust->CODE01 ?? '')) === '' || !preg_match('/^\d+$/', trim((string) ($cust->CODE01 ?? ''))))) {
-            $updates['CODE01'] = $code01;
-        }
-
-        if ($updates !== []) {
-            $updates['LastUpdate'] = Carbon::now();
+        if (count($updates) > 1) {
             $cust->update($updates);
         }
     }
@@ -702,11 +712,14 @@ class ExportImportDataController extends Controller
         bool $metodeByNodaftar = false,
         ?scctcust $existingCust = null,
         ?mst_kelas $matchedKelas = null,
+        ?mst_sekolah $sekolah = null,
     ): array {
+        $schoolCode = trim((string) ($sekolah->CODE01 ?? ''));
         $kelas = $matchedKelas ?? mst_kelas::findForImport(
             $item['unit'] ?? null,
             $item['kelas'] ?? null,
             $item['kelompok'] ?? null,
+            $schoolCode !== '' ? $schoolCode : null,
         );
 
         if (!$kelas) {
@@ -718,17 +731,10 @@ class ExportImportDataController extends Controller
             ));
         }
 
-        $sekolah = $this->resolveSekolahForImport($item['unit'] ?? null, $kelas);
-
-        // CODE01 harus kode sekolah angka (104/105), bukan teks UNIT (SD)
-        $code01 = $sekolah?->CODE01
-            ?? (preg_match('/^\d+$/', trim((string) ($kelas->kelompok ?? ''))) ? trim((string) $kelas->kelompok) : null);
-
+        // Sekolah wajib dari dropdown — jangan tebak dari teks UNIT Excel (mis. "SD")
+        $code01 = $schoolCode !== '' ? $schoolCode : null;
         if ($code01 === null || $code01 === '') {
-            throw new Exception(sprintf(
-                'Kode sekolah (CODE01) tidak ditemukan untuk unit %s. Periksa Master Sekolah / kolom kelompok di Master Kelas.',
-                $item['unit'] ?? '-',
-            ));
+            throw new Exception('Pilih sekolah tujuan penyimpanan. Sekolah tidak diambil dari kolom UNIT Excel.');
         }
 
         $payload = [

@@ -176,6 +176,21 @@
                                     </select>
                                 </div>
                             </div>
+                            <div class="row mb-3" id="sekolah_wrap">
+                                <div class="col">
+                                    <label class="form-label" for="sekolah">Sekolah <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="sekolah" name="sekolah" data-control="select2" data-placeholder="Pilih sekolah" required>
+                                        <option value=""></option>
+                                        @isset($sekolah)
+                                            @foreach($sekolah as $item)
+                                                <option value="{{ $item->CODE01 }}">{{ $item->DESC01 }}</option>
+                                            @endforeach
+                                        @endisset
+                                    </select>
+                                    <div class="form-text">Siswa disimpan ke sekolah ini. Bukan dari kolom UNIT di Excel.</div>
+                                    <div class="invalid-feedback" role="alert"><strong></strong></div>
+                                </div>
+                            </div>
                         </fieldset>
                     </div>
                     <div class="modal-footer ">
@@ -358,14 +373,33 @@
             if (select2.length) {
                 select2.each(function () {
                     let $this = $(this);
-                    // select2Focus($this);
+                    const parent = $this.closest('.modal').length
+                        ? $this.closest('.modal')
+                        : $this.parent();
                     $this.wrap('<div class="position-relative"></div>').select2({
-                        placeholder: 'Select value',
+                        placeholder: $this.data('placeholder') || 'Pilih',
+                        allowClear: true,
                         language: 'id',
-                        dropdownParent: $this.parent()
+                        dropdownParent: parent
                     });
                 });
             }
+
+            function syncSekolahField() {
+                const metode = String($('#metode').val() || '');
+                const needsSekolah = metode === '1' || metode === '2';
+                const $wrap = $('#sekolah_wrap');
+                const $sekolah = $('#sekolah');
+                if (needsSekolah) {
+                    $wrap.removeClass('d-none');
+                    $sekolah.prop('required', true);
+                } else {
+                    $wrap.addClass('d-none');
+                    $sekolah.prop('required', false).val(null).trigger('change');
+                }
+            }
+            $('#metode').on('change', syncSekolahField);
+            syncSekolahField();
 
             document.querySelectorAll(".mainForm").forEach(form => {
                 form.addEventListener("submit", function (e) {
