@@ -205,13 +205,13 @@
                         <ul class="list-group list-group-timeline mb-3">
                             <li class="list-group-item list-group-timeline-danger">File harus berformat <span class="fw-bold">XLS/XLSX</span>.</li>
                             <li class="list-group-item list-group-timeline-danger">Ukuran file tidak boleh lebih dari <span class="fw-bold">1024KB/1MB</span>.</li>
-                            <li class="list-group-item list-group-timeline-danger">Kolom wajib: <span class="fw-bold">NIS dan Nominal</span>. Tagihan hanya pakai NIS, bukan nodaf.</li>
-                            <li class="list-group-item list-group-timeline-danger">Kolom lain (<span class="fw-bold">Nama, Unit, Kelas, Kelompok, Angkatan, Gender, Alamat, Ortu</span>) opsional — boleh kosong.</li>
-                            <li class="list-group-item list-group-timeline-danger">Contoh file yang dapat diproses untuk import:
+                            <li class="list-group-item list-group-timeline-danger">Kolom wajib hanya: <span class="fw-bold">NIS</span> dan <span class="fw-bold">Nominal</span>. Tagihan hanya pakai NIS, bukan nodaf.</li>
+                            <li class="list-group-item list-group-timeline-danger">Jenis tagihan &amp; periode dipilih di form halaman ini, bukan di Excel.</li>
+                            <li class="list-group-item list-group-timeline-danger">Download template:
                                 <a class="btn btn-sm btn-outline-primary fw-bolder"
-                                   href="{{asset('TEMPLATE MENU UPLOAD DATA SISWA.xlsx')}}?v=20260923-syukro"
-                                   download>
-                                    <i class="ri ri-file-excel-line me-2"></i>Contoh File
+                                   href="{{asset('TEMPLATE UPLOAD TAGIHAN.xlsx')}}?v=20261019-nis-nominal"
+                                   download="TEMPLATE UPLOAD TAGIHAN.xlsx">
+                                    <i class="ri ri-file-excel-line me-2"></i>Template Tagihan (NIS + Nominal)
                                 </a>
                             </li>
                         </ul>
