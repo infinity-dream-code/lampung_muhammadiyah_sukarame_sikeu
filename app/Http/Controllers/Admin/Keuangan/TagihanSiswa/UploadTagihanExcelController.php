@@ -5,14 +5,17 @@ namespace App\Http\Controllers\Admin\Keuangan\TagihanSiswa;
 use App\Http\Controllers\Controller;
 use App\Imports\Keuangan\TagihanSiswa\ImportTagihanExcel;
 use App\Models\mst_tagihan;
+use App\Models\scctbill;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use App\Support\InputTagihanProcedure;
 use App\Support\SchoolScope;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\HeadingRowImport;
 use Maatwebsite\Excel\Validators\ValidationException;
@@ -242,6 +245,7 @@ class UploadTagihanExcelController extends Controller
             $skippedInactive = [];
             $skippedInvalid = [];
             $insertedCount = 0;
+            $failedRows = [];
 
             foreach ($data as $item) {
                 if ((int) ($item['status'] ?? 0) !== 1) {
@@ -250,7 +254,17 @@ class UploadTagihanExcelController extends Controller
                 }
 
                 $nocust = trim((string) ($item['nocust'] ?? $item['nis'] ?? ''));
-                $siswa = scctcust::where('NOCUST', $nocust);
+                $nominal = (int) ($item['nominal'] ?? 0);
+                if ($nocust === '' || $nocust === '-' || $nominal <= 0) {
+                    $skippedInvalid[] = trim($nocust.' - Data NIS/Nominal tidak valid');
+                    continue;
+                }
+
+                $siswa = scctcust::query()
+                    ->where(function ($q) use ($nocust) {
+                        $q->where('NOCUST', $nocust)
+                            ->orWhereRaw('TRIM(NOCUST) = ?', [$nocust]);
+                    });
                 SchoolScope::apply($siswa, 'scctcust', $this->sekolah);
                 $siswa = $siswa->first();
                 if (!$siswa) {
@@ -262,18 +276,43 @@ class UploadTagihanExcelController extends Controller
                     continue;
                 }
 
-                InputTagihanProcedure::call(
-                    $nocust,
-                    (int) ($item['nominal'] ?? 0),
-                    $nmTagihan,
-                    $bta,
-                    $bta,
-                    $isNyicil,
-                );
+                try {
+                    InputTagihanProcedure::call(
+                        (string) $siswa->NOCUST,
+                        $nominal,
+                        $nmTagihan,
+                        $bta,
+                        $bta,
+                        $isNyicil,
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('input-tagihan.procedure.fail_fallback', [
+                        'nocust' => $nocust,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+
+                // Pastikan baris benar-benar ada (SP kadang sukses tanpa insert)
+                if (!$this->tagihanExistsForSiswa((int) $siswa->CUSTID, $nmTagihan, $bta)) {
+                    $this->createTagihanDirect($siswa, $nominal, $nmTagihan, $bta, $isNyicil);
+                }
+
+                if (!$this->tagihanExistsForSiswa((int) $siswa->CUSTID, $nmTagihan, $bta)) {
+                    $failedRows[] = $nocust;
+                    continue;
+                }
+
                 $insertedCount++;
             }
 
             Cache::forget($this->cacheKey);
+            $this->bumpDataTagihanCache();
+
+            if ($insertedCount === 0 && empty($failedRows)) {
+                return response()->json([
+                    'message' => 'Tidak ada tagihan yang disimpan. Semua baris dilewati (invalid/nonaktif).',
+                ], 422);
+            }
 
             $message = "Data tagihan disimpan. Berhasil dibuat untuk {$insertedCount} siswa.";
             if (!empty($skippedInactive)) {
@@ -283,8 +322,16 @@ class UploadTagihanExcelController extends Controller
             if (!empty($skippedInvalid)) {
                 $message .= '<hr>Baris tidak diproses karena data tidak valid: '.count($skippedInvalid).' baris.';
             }
+            if (!empty($failedRows)) {
+                $message .= '<hr>Gagal menyimpan tagihan untuk NIS: '.implode(', ', $failedRows);
+            }
 
-            return response()->json(['message' => $message], 200);
+            return response()->json([
+                'message' => $message,
+                'inserted' => $insertedCount,
+                'bta' => $bta,
+                'tagihan' => $nmTagihan,
+            ], empty($failedRows) || $insertedCount > 0 ? 200 : 422);
         } catch (\Throwable $e) {
             Log::error('Simpan tagihan excel gagal', [
                 'user_id' => auth()->id(),
@@ -297,6 +344,86 @@ class UploadTagihanExcelController extends Controller
                 'error' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    private function tagihanExistsForSiswa(int $custId, string $billNm, string $billac): bool
+    {
+        return scctbill::query()
+            ->where('CUSTID', $custId)
+            ->where('BILLNM', $billNm)
+            ->where('BILLAC', $billac)
+            ->where('FSTSBolehBayar', 1)
+            ->exists();
+    }
+
+    private function createTagihanDirect(scctcust $siswa, int $nominal, string $billNm, string $billac, string $isNyicil): void
+    {
+        $custId = (int) $siswa->CUSTID;
+        $existing = scctbill::query()
+            ->where('CUSTID', $custId)
+            ->where('BILLNM', $billNm)
+            ->where('BILLAC', $billac)
+            ->where('FSTSBolehBayar', 1)
+            ->first();
+
+        if ($existing) {
+            $existing->increment('BILLAM', $nominal);
+            if ($existing->PAYMENTLEFT !== null) {
+                $existing->increment('PAYMENTLEFT', $nominal);
+            } else {
+                $existing->update([
+                    'PAYMENTLEFT' => max(0, (int) $existing->BILLAM - (int) ($existing->BILLPAID ?? 0)),
+                ]);
+            }
+
+            return;
+        }
+
+        $maxUrut = (int) scctbill::where('CUSTID', $custId)->max('FUrutan');
+        $newUrut = $maxUrut + 1;
+        $billYear = substr($billac, 0, 4);
+        $billMonth = strlen($billac) >= 6 ? substr($billac, 4, 2) : date('m');
+        $newBillCd = "{$billYear}/{$billMonth}-{$newUrut}";
+        $suffix = 0;
+        while (scctbill::where('CUSTID', $custId)->where('BILLCD', $newBillCd)->exists()) {
+            $suffix++;
+            $newBillCd = "{$billYear}/{$billMonth}-{$newUrut}-{$suffix}";
+        }
+
+        scctbill::create([
+            'CUSTID' => $custId,
+            'BILLCD' => $newBillCd,
+            'BILLAC' => $billac,
+            'BILLNM' => $billNm,
+            'BILLAM' => $nominal,
+            'BILLPAID' => 0,
+            'PAYMENTLEFT' => $nominal,
+            'PAIDST' => 0,
+            'PAIDDT' => null,
+            'FSTSBolehBayar' => 1,
+            'FUrutan' => $newUrut,
+            'FTGLTagihan' => Carbon::now(),
+            'BTA' => $billac,
+            'INSTALLMENT' => ((int) $isNyicil === 1) ? 1 : 0,
+            'isINSTALLABLE' => ((int) $isNyicil === 1) ? 1 : 0,
+        ]);
+
+        Log::info('input-tagihan.direct.ok', [
+            'custid' => $custId,
+            'nocust' => $siswa->NOCUST,
+            'billnm' => $billNm,
+            'billac' => $billac,
+            'nominal' => $nominal,
+        ]);
+    }
+
+    private function bumpDataTagihanCache(): void
+    {
+        $key = Str::slug('data_tagihan').'_cache_version';
+        if (!Cache::has($key)) {
+            Cache::forever($key, 1);
+        }
+        Cache::increment($key);
     }
 
     public function clear()

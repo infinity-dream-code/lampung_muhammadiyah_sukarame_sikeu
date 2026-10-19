@@ -524,6 +524,10 @@
                     } else if (formId === "formValidate") {
                         let form = document.getElementById('filterForm');
                         formData = new FormData(form);
+                        // Pastikan nilai Select2 ikut terkirim
+                        formData.set('tagihan', $('#tagihan').val() || '');
+                        formData.set('periode_tahun', $('#periode_tahun').val() || '');
+                        formData.set('periode_bulan', isSelectedTagihanSpp() ? ($('#periode_bulan').val() || '') : '');
                         loadingAlert('Menyimpan data tagihan');
                         url = '{{route('admin.keuangan.tagihan-siswa.upload-tagihan-excel.validate-excel')}}';
                         method = 'POST';
