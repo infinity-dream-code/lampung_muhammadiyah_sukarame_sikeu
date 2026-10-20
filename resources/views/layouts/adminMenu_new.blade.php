@@ -92,11 +92,14 @@
                         </li>
                     </ul>
                 </li>
+                {{-- Menu Manual Pembayaran ditutup untuk client MIT Muhammadiyah Sukarame --}}
+                {{--
                 <li class="menu-item {{ Request::is(['admin/keuangan/manual-pembayaran*']) ? 'active' : '' }}">
                     <a href="{{ route('admin.keuangan.manual-pembayaran.index') }}" class="menu-link">
                         <div data-i18n="Manual Pembayaran">Manual Pembayaran</div>
                     </a>
                 </li>
+                --}}
                 <li class="menu-item {{ Request::is(['admin/keuangan/penerimaan-siswa/data-penerimaan*']) ? 'active' : '' }}">
                     <a href="{{ route('admin.keuangan.penerimaan-siswa.data-penerimaan.index') }}" class="menu-link">
                         <div data-i18n="Data Tagihan Lunas">Data Tagihan Lunas</div>
@@ -140,6 +143,45 @@
                 <li class="menu-item {{ Request::is(['admin/manual-input/edit-manual*']) ? 'active' : '' }}">
                     <a href="{{ route('admin.manual-input.edit-manual.index') }}" class="menu-link">
                         <div data-i18n="Edit Manual">Edit Manual</div>
+                    </a>
+                </li>
+            </ul>
+        </li>
+
+        <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana*']) ? 'active open' : '' }}">
+            <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon ri ri-booklet-line"></i>
+                <div data-i18n="Pencatatan Sederhana">Pencatatan Sederhana</div>
+            </a>
+            <ul class="menu-sub">
+                <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/akun-kas-masuk*']) ? 'active' : '' }}">
+                    <a href="{{ route('admin.pencatatan-sederhana.akun-kas-masuk.index') }}" class="menu-link">
+                        <div>Akun Kas Masuk</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/akun-kas-keluar*']) ? 'active' : '' }}">
+                    <a href="{{ route('admin.pencatatan-sederhana.akun-kas-keluar.index') }}" class="menu-link">
+                        <div>Akun Kas Keluar</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/kas-masuk*']) ? 'active' : '' }}">
+                    <a href="{{ route('admin.pencatatan-sederhana.kas-masuk.index') }}" class="menu-link">
+                        <div>Kas Masuk</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/kas-keluar*']) ? 'active' : '' }}">
+                    <a href="{{ route('admin.pencatatan-sederhana.kas-keluar.index') }}" class="menu-link">
+                        <div>Kas Keluar</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/cek-pencatatan*']) ? 'active' : '' }}">
+                    <a href="{{ route('admin.pencatatan-sederhana.cek-pencatatan.index') }}" class="menu-link">
+                        <div>Cek Pencatatan</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/rekap-export-excel*']) ? 'active' : '' }}">
+                    <a href="{{ route('admin.pencatatan-sederhana.rekap-export-excel.index') }}" class="menu-link">
+                        <div>Rekap Export Excel</div>
                     </a>
                 </li>
             </ul>

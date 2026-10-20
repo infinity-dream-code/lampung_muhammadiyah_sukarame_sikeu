@@ -7,9 +7,10 @@
 @section('script')
     <script>
         (function () {
-            const key = 'assyafiyah_sidoarjo_419_reloaded';
+            const key = 'mit_muhammadiyah_sukarame_419_reloaded';
             if (!sessionStorage.getItem(key)) {
                 sessionStorage.setItem(key, '1');
+                // Reload halaman yang sama — jangan ke login / jangan alert sesi habis.
                 window.location.reload();
                 return;
             }

@@ -16,14 +16,22 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Ponpes Asy-Syafi\'iyah'),
-    'nama_instansi' => env('APP_NAMA_INSTANSI', 'Ponpes Asy-Syafi\'iyah'),
-    'alamat' => env('APP_ALAMAT', 'Kab. Sidoarjo, Prov. Jawa Timur'),
-    'logo' => env('APP_LOGO', 'iconme.jpg'),
+    'name' => env('APP_NAME', 'MIT Muhammadiyah Sukarame'),
+    'nama_instansi' => env('APP_NAMA_INSTANSI', 'MIT Muhammadiyah Sukarame'),
+    'alamat' => env('APP_ALAMAT', 'Kota Bandar Lampung, Prov. Lampung'),
+    'logo' => env('APP_LOGO', 'mit.png'),
+    'logo_mime' => match (strtolower(pathinfo((string) env('APP_LOGO', 'mit.png'), PATHINFO_EXTENSION))) {
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'svg' => 'image/svg+xml',
+        default => 'image/jpeg',
+    },
     'email' => env('APP_EMAIL', 'ypisabkho@gmail.com'),
     'telepon' => env('APP_TELEPON', 'SIKEU'),
-    'domisili' => env('APP_DOMISILI', 'Kab. Sidoarjo'),
-    'nova' => env('APP_NOVA') ?: '751095',
+    'domisili' => env('APP_DOMISILI', 'Kota Bandar Lampung'),
+    // Prefix VA Open Payment: 777 26 → 77726
+    'nova' => env('APP_NOVA') ?: '77726',
     'biaya_admin' => env('BIAYA_ADMIN', 0),
     'dummy_seeder' => env('DUMMY_SEEDER',false),
     'demo_mode' => env('DEMO_MODE',false),

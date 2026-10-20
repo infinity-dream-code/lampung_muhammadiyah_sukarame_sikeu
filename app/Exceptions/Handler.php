@@ -37,6 +37,8 @@ class Handler extends ExceptionHandler
     {
         if ($e instanceof TokenMismatchException) {
             try {
+                // 419: refresh CSRF diam-diam + restore cookie. Jangan migrate session id
+                // kecuali session memang corrupt (itu di cabang isSessionCorrupt).
                 PersistentLogin::restoreFromRequest($request);
             } catch (Throwable) {
                 //
@@ -54,6 +56,7 @@ class Handler extends ExceptionHandler
                 ], 419);
             }
 
+            // Kembali ke URL yang sama (halaman yang sedang dibuka), bukan login.
             if ($request->isMethod('GET')) {
                 return redirect()->to($request->fullUrl());
             }
@@ -67,10 +70,17 @@ class Handler extends ExceptionHandler
                 $user = PersistentLogin::restoreFromRequest($request);
             } catch (Throwable $ex) {
                 if (
-                    PersistentLogin::isTransient($ex)
+                    PersistentLogin::isSessionCorrupt($ex)
                     && $request->isMethod('GET')
                     && !$request->boolean('_retry')
                 ) {
+                    PersistentLogin::recreateSession($request);
+                    try {
+                        PersistentLogin::restoreFromRequest($request);
+                    } catch (Throwable) {
+                        //
+                    }
+
                     return redirect()->to($request->fullUrlWithQuery(['_retry' => 1]));
                 }
             }
@@ -92,6 +102,22 @@ class Handler extends ExceptionHandler
             }
 
             return PersistentLogin::unauthenticatedResponse($request);
+        }
+
+        // Session gagal dibaca / file corrupt → recreate + redirect ke halaman sebelumnya.
+        if (
+            PersistentLogin::isSessionCorrupt($e)
+            && $request->isMethod('GET')
+            && !$request->boolean('_sess_retry')
+        ) {
+            try {
+                PersistentLogin::recreateSession($request);
+                PersistentLogin::restoreFromRequest($request);
+            } catch (Throwable) {
+                //
+            }
+
+            return redirect()->to($request->fullUrlWithQuery(['_sess_retry' => 1]));
         }
 
         if (

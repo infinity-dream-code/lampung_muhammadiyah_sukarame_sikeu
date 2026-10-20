@@ -26,10 +26,10 @@ Route::prefix("admin")
         Route::prefix("master-data")->name("master-data.")->group(function () {
             Route::get("get-logo", function (\Illuminate\Http\Request $request) {
                 $path = public_path(config("app.logo"));
-                $mime = "image/jpeg";
                 if (!file_exists($path)) {
                     return response()->json(["data" => null], 404);
                 }
+                $mime = config("app.logo_mime", "image/png");
                 $data = "data:{$mime};base64," . base64_encode(file_get_contents($path));
                 return response()->json(["data" => $data]);
             })->name("get-logo");
@@ -225,4 +225,67 @@ Route::prefix("admin")
                     Route::resource("", \App\Http\Controllers\Admin\ManualInput\EditManualController::class)->parameters(["" => "id"]);
                 });
         });
+
+        Route::prefix("pencatatan-sederhana")
+            ->name("pencatatan-sederhana.")
+            ->group(function () {
+                Route::controller(\App\Http\Controllers\Admin\Pencatatan\AkunKasMasukController::class)
+                    ->prefix("akun-kas-masuk")
+                    ->name("akun-kas-masuk.")
+                    ->group(function () {
+                        Route::get("/", "index")->name("index");
+                        Route::get("get-data", "getData")->name("get-data");
+                        Route::get("get-column", "getColumn")->name("get-column");
+                        Route::post("/", "store")->name("store");
+                    });
+
+                Route::controller(\App\Http\Controllers\Admin\Pencatatan\AkunKasKeluarController::class)
+                    ->prefix("akun-kas-keluar")
+                    ->name("akun-kas-keluar.")
+                    ->group(function () {
+                        Route::get("/", "index")->name("index");
+                        Route::get("get-data", "getData")->name("get-data");
+                        Route::get("get-column", "getColumn")->name("get-column");
+                        Route::post("/", "store")->name("store");
+                    });
+
+                Route::controller(\App\Http\Controllers\Admin\Pencatatan\CekPencatatanController::class)
+                    ->prefix("cek-pencatatan")
+                    ->name("cek-pencatatan.")
+                    ->group(function () {
+                        Route::get("/", "index")->name("index");
+                        Route::get("get-data", "getData")->name("get-data");
+                        Route::get("get-column", "getColumn")->name("get-column");
+                    });
+
+                Route::controller(\App\Http\Controllers\Admin\Pencatatan\RekapExportExcelController::class)
+                    ->prefix("rekap-export-excel")
+                    ->name("rekap-export-excel.")
+                    ->group(function () {
+                        Route::get("/", "index")->name("index");
+                        Route::get("get-data", "getData")->name("get-data");
+                        Route::get("get-column", "getColumn")->name("get-column");
+                        Route::get("export", "export")->name("export");
+                    });
+
+                Route::controller(\App\Http\Controllers\Admin\Pencatatan\KasMasukController::class)
+                    ->prefix("kas-masuk")
+                    ->name("kas-masuk.")
+                    ->group(function () {
+                        Route::get("/", "index")->name("index");
+                        Route::get("get-data", "getData")->name("get-data");
+                        Route::get("get-column", "getColumn")->name("get-column");
+                        Route::post("/", "store")->name("store");
+                    });
+
+                Route::controller(\App\Http\Controllers\Admin\Pencatatan\KasKeluarController::class)
+                    ->prefix("kas-keluar")
+                    ->name("kas-keluar.")
+                    ->group(function () {
+                        Route::get("/", "index")->name("index");
+                        Route::get("get-data", "getData")->name("get-data");
+                        Route::get("get-column", "getColumn")->name("get-column");
+                        Route::post("/", "store")->name("store");
+                    });
+            });
     });

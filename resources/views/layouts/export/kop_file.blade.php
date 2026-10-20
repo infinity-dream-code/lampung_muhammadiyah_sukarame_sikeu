@@ -111,7 +111,14 @@
         <td style="text-align: center; vertical-align: middle;">
             @php
                 $logoPath = public_path(config('app.logo'));
-                $logoMime = 'image/jpeg';
+                $logoExt = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
+                $logoMime = match ($logoExt) {
+                    'png' => 'image/png',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    'svg' => 'image/svg+xml',
+                    default => 'image/jpeg',
+                };
             @endphp
             <img src="data:{{ $logoMime }};base64,{{ base64_encode(file_get_contents($logoPath)) }}" style="max-height: 5rem; display: block; margin: auto;" alt="logo"/>
         </td>

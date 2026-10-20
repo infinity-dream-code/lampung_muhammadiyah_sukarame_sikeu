@@ -799,7 +799,7 @@
             const userName = "{{ Auth::user()->name }}";
             const domisili = @json(config('app.domisili'));
             const tanggalSekarang = "{{ \Carbon\Carbon::now()->locale('id')->isoFormat('dddd, D MMMM YYYY') }}";
-            const APP_VA_PREFIX = @json((string) (config('app.nova') ?: '751095'));
+            const APP_VA_PREFIX = @json((string) (config('app.nova') ?: '77726'));
             const showVA = (nis) => typeof formatNoVA === 'function'
                 ? formatNoVA(nis, APP_VA_PREFIX)
                 : (() => {
@@ -825,7 +825,7 @@
             }
 
             async function getLogoUnit(unit = false) {
-                const fallbackLogo = 'data:image/jpeg;base64,' + "{{ base64_encode(file_get_contents(public_path(config('app.logo')))) }}";
+                const fallbackLogo = 'data:{{ config("app.logo_mime") }};base64,' + "{{ base64_encode(file_get_contents(public_path(config('app.logo')))) }}";
                 try {
                     if (!unit) {
                         throw 'error';
@@ -886,7 +886,7 @@
 
             async function generatePdf(title, bodyContent, unit_logo = false) {
                 try {
-                    let logo = 'data:image/jpeg;base64,' + headerLogo;
+                    let logo = 'data:{{ config("app.logo_mime") }};base64,' + headerLogo;
 
                     if (unit_logo) {
                         logo = await getLogoUnit(unit_logo);

@@ -46,6 +46,6 @@ class RetryTransientGet
             return false;
         }
 
-        return PersistentLogin::isTransient($e);
+        return PersistentLogin::isSessionCorrupt($e) || PersistentLogin::isTransient($e);
     }
 }

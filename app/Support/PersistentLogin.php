@@ -12,7 +12,7 @@ use Throwable;
 
 class PersistentLogin
 {
-    public const COOKIE = 'assyafiyah-sidoarjo';
+    public const COOKIE = 'mit_muhammadiyah_sukarame';
 
     public static function lifetimeMinutes(): int
     {
@@ -109,12 +109,67 @@ class PersistentLogin
             ], 401);
         }
 
-        // Cookie masih ada: kemungkinan transient — reload sekali, jangan tendang ke login.
+        // Cookie masih ada: recreate session + reload ke URL yang sama, jangan tendang ke login.
         if (self::hasCookie($request) && !$request->boolean('_auth_retry')) {
+            self::recreateSession($request);
+            self::restoreFromRequest($request);
+
             return redirect()->to($request->fullUrlWithQuery(['_auth_retry' => 1]));
         }
 
         return redirect()->guest(route('login'));
+    }
+
+    /**
+     * Session file/cookie rusak atau gagal dibaca: buat session baru,
+     * restore auth dari cookie persistent, tetap di halaman yang sama.
+     * Jangan Auth::login() (migrate CSRF) dan jangan logout.
+     */
+    public static function recreateSession(Request $request): void
+    {
+        if (!$request->hasSession()) {
+            return;
+        }
+
+        try {
+            $session = $request->session();
+            $session->migrate(true);
+            $session->regenerateToken();
+            $session->put('_session_recreated_at', now()->timestamp);
+        } catch (Throwable) {
+            try {
+                $request->session()->regenerateToken();
+            } catch (Throwable) {
+                //
+            }
+        }
+    }
+
+    public static function isSessionCorrupt(Throwable $e): bool
+    {
+        $haystack = strtolower($e::class.' '.$e->getMessage());
+
+        foreach ([
+            'unable to retrieve the session',
+            'session store not set on request',
+            'failed to open stream',
+            'unable to create lockable file',
+            'unable to obtain lock',
+            'resource temporarily unavailable',
+            'being used by another process',
+            'permission denied',
+            'no such file or directory',
+            'session has already been started',
+            'failed to read session',
+            'session data corrupted',
+            'unserialize',
+        ] as $needle) {
+            if (str_contains($haystack, $needle)) {
+                return true;
+            }
+        }
+
+        return self::isTransient($e);
     }
 
     public static function isAjaxRequest(Request $request): bool

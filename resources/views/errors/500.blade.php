@@ -7,7 +7,7 @@
 @section('script')
     <script>
         (function () {
-            const key = 'assyafiyah_sidoarjo_500_reloaded';
+            const key = 'mit_muhammadiyah_sukarame_500_reloaded';
             if (!sessionStorage.getItem(key)) {
                 sessionStorage.setItem(key, '1');
                 window.location.reload();
