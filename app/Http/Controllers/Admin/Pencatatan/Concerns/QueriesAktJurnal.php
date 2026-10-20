@@ -27,9 +27,12 @@ trait QueriesAktJurnal
             'kredit',
             'tahun',
             'periode',
-            'buktiurl',
         ];
 
+        // DB MIT lama belum punya buktiurl / NamaAkun* — jangan select biar tidak 500.
+        if (PencatatanJurnalTable::hasBuktiUrlColumn()) {
+            $select[] = 'buktiurl';
+        }
         if (PencatatanJurnalTable::hasAkunMasukColumn()) {
             $select[] = 'NamaAkunMasuk';
         }

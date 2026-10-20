@@ -52,6 +52,9 @@ trait StoresJurnalKas
         if (!PencatatanJurnalTable::hasAkunKeluarColumn()) {
             unset($payload['NamaAkunKeluar']);
         }
+        if (!PencatatanJurnalTable::hasBuktiUrlColumn()) {
+            unset($payload['buktiurl']);
+        }
 
         return akt_jurnal::query()->create($payload);
     }
