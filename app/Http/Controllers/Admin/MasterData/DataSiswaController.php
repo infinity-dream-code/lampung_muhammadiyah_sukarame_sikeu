@@ -80,7 +80,7 @@ class DataSiswaController extends Controller
             ["data" => "select_reset", "name" => "", "searchable" => false, "orderable" => false, "className" => "text-center", "exportable" => false],
             ["data" => null, "name" => "no", "className" => "text-center", "columnType" => "row", "exportable" => true],
             ["data" => "nocust", "name" => "NIS", "searchable" => true, "orderable" => true, "exportable" => true],
-            ["data" => "va_spp", "name" => "VA SPP", "searchable" => false, "orderable" => false, "exportable" => true],
+            ["data" => "va_spp", "name" => "NO VA", "searchable" => false, "orderable" => false, "exportable" => true],
             ["data" => "NUM2ND", "name" => "No Pendaftaran", "searchable" => true, "orderable" => true, "exportable" => true],
             ["data" => "nmcust", "name" => "NAMA", "searchable" => true, "orderable" => true, "exportable" => true],
             ["data" => "CODE02", "name" => "Unit", "searchable" => true, "orderable" => true, "exportable" => true],

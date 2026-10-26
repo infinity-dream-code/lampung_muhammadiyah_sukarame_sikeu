@@ -19,6 +19,15 @@ class Authenticate extends Middleware
             }
         }
 
+        if (!auth()->check() && PersistentLogin::hasCookie($request)) {
+            try {
+                PersistentLogin::recreateSession($request);
+                PersistentLogin::restoreFromRequest($request);
+            } catch (\Throwable) {
+                // Handler / unauthenticatedResponse yang menuntaskan retry.
+            }
+        }
+
         return parent::handle($request, $next, ...$guards);
     }
 

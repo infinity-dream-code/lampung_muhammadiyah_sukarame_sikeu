@@ -15,21 +15,31 @@ class RestorePersistentLogin
             try {
                 PersistentLogin::restoreFromRequest($request);
             } catch (\Throwable $e) {
-                if (PersistentLogin::isSessionCorrupt($e) && $request->isMethod('GET') && !$request->boolean('_sess_retry')) {
+                if (PersistentLogin::isSessionCorrupt($e)) {
                     PersistentLogin::recreateSession($request);
                     try {
                         PersistentLogin::restoreFromRequest($request);
                     } catch (\Throwable) {
                         //
                     }
-
-                    return redirect()->to($request->fullUrlWithQuery(['_sess_retry' => 1]));
-                }
-
-                if (!PersistentLogin::isTransient($e)) {
+                } elseif (!PersistentLogin::isTransient($e)) {
                     throw $e;
                 }
                 // Biarkan RetryTransientGet / Handler mengulang GET.
+            }
+
+            PersistentLogin::rememberContinueUrl($request);
+
+            if (
+                $request->isMethod('GET')
+                && (
+                    $request->boolean('_sess_retry')
+                    || $request->boolean('_auth_retry')
+                    || $request->boolean('_retry')
+                )
+                && auth()->check()
+            ) {
+                return redirect()->to(PersistentLogin::continueUrl($request));
             }
         }
 

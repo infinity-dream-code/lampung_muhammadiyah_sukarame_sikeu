@@ -7,6 +7,7 @@ use App\Imports\Keuangan\TagihanSiswa\ImportTagihanExcel;
 use App\Imports\Keuangan\TagihanSiswa\ImportTagihanPMBExcel;
 use App\Models\mst_tagihan;
 use App\Models\scctbill;
+use App\Models\scctbill_detail;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use Illuminate\Http\Request;
@@ -205,6 +206,7 @@ class UploadTagihanPMBExcelController extends Controller
 
                 $urut = $tagihanSiswaTerbaru ? $tagihanSiswaTerbaru['FUrutan'] + 1 : 1;
 
+                $billCd = date('Y') . '/i' . date('m') . '-' . ($urut + 1);
                 scctbill::create([
                     'CUSTID' => $siswa->CUSTID,
                     'BILLAC' => $bta,
@@ -217,9 +219,18 @@ class UploadTagihanPMBExcelController extends Controller
                     'FTGLTagihan' => now(),
                     'FSTSBolehBayar' => 1,
                     'BTA' => $bta,
-                    'BILLCD' => date('Y') . '/i' . date('m') . '-' . ($urut + 1),
+                    'BILLCD' => $billCd,
                     'INSTALLMENT' => 0,
                     'isINSTALLABLE' => (int) ($tagihan->isINSTALLMENT ?? 0),
+                ]);
+
+                scctbill_detail::create([
+                    'KodePost' => $tagihan->kodeAkun(),
+                    'CUSTID' => $siswa->CUSTID,
+                    'BILLAM' => (int) $item['nominal'],
+                    'tahun' => substr($bta, 0, 4),
+                    'periode' => substr($bta, 4, 2),
+                    'BILLCD' => $billCd,
                 ]);
             }
 

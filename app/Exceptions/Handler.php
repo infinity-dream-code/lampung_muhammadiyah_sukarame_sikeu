@@ -56,49 +56,31 @@ class Handler extends ExceptionHandler
                 ], 419);
             }
 
-            // Kembali ke URL yang sama (halaman yang sedang dibuka), bukan login.
+            // Kembali ke halaman yang sedang dibuka, bukan login.
             if ($request->isMethod('GET')) {
-                return redirect()->to($request->fullUrl());
+                return redirect()->to(PersistentLogin::continueUrl($request));
             }
 
-            return redirect()->back();
+            return redirect()->to(PersistentLogin::continueUrl($request));
         }
 
         if ($e instanceof AuthenticationException) {
             $user = null;
             try {
+                PersistentLogin::recreateSession($request);
                 $user = PersistentLogin::restoreFromRequest($request);
             } catch (Throwable $ex) {
-                if (
-                    PersistentLogin::isSessionCorrupt($ex)
-                    && $request->isMethod('GET')
-                    && !$request->boolean('_retry')
-                ) {
-                    PersistentLogin::recreateSession($request);
-                    try {
-                        PersistentLogin::restoreFromRequest($request);
-                    } catch (Throwable) {
-                        //
-                    }
-
-                    return redirect()->to($request->fullUrlWithQuery(['_retry' => 1]));
+                if (PersistentLogin::isTransient($ex) && PersistentLogin::isAjaxRequest($request)) {
+                    return PersistentLogin::retryJson($request);
                 }
             }
 
             if ($user) {
                 if (PersistentLogin::isAjaxRequest($request)) {
-                    return response()->json([
-                        'ok' => true,
-                        'retry' => true,
-                        'token' => csrf_token(),
-                    ], 401);
+                    return PersistentLogin::retryJson($request);
                 }
 
-                if ($request->isMethod('GET')) {
-                    return redirect()->to($request->fullUrl());
-                }
-
-                return redirect()->back();
+                return redirect()->to(PersistentLogin::continueUrl($request));
             }
 
             return PersistentLogin::unauthenticatedResponse($request);
@@ -117,7 +99,10 @@ class Handler extends ExceptionHandler
                 //
             }
 
-            return redirect()->to($request->fullUrlWithQuery(['_sess_retry' => 1]));
+            return redirect()->to(PersistentLogin::withQuery(
+                PersistentLogin::continueUrl($request),
+                ['_sess_retry' => 1]
+            ));
         }
 
         if (

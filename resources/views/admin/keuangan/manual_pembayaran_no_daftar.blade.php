@@ -799,7 +799,7 @@
             const userName = "{{ Auth::user()->name }}";
             const domisili = @json(config('app.domisili'));
             const tanggalSekarang = "{{ \Carbon\Carbon::now()->locale('id')->isoFormat('dddd, D MMMM YYYY') }}";
-            const APP_VA_PREFIX = @json((string) (config('app.nova') ?: '77726'));
+            const APP_VA_PREFIX = @json((string) (config('app.nova') ?: '777726'));
             const showVA = (nis) => typeof formatNoVA === 'function'
                 ? formatNoVA(nis, APP_VA_PREFIX)
                 : (() => {

@@ -18,7 +18,7 @@ class AuthController extends Controller
         }
 
         if (Auth::check()) {
-            return redirect()->route("admin.index");
+            return redirect()->to(PersistentLogin::continueUrl(request()));
         }
 
         return redirect("login");

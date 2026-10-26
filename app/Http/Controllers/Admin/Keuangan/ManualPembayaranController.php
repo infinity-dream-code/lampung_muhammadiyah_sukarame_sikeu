@@ -398,7 +398,7 @@ class ManualPembayaranController extends Controller
                 }
 
                 $lastNumber = (int)($last_date->last_number ?? 0);
-                $transno = date('Ym') . substr(config('app.nova'), 5, 2) . substr($request->input('bank'), -2) . date('d') . $lastNumber;
+                $transno = date('Ym') . substr((string) config('app.nova'), -2) . substr($request->input('bank'), -2) . date('d') . $lastNumber;
             }
 
             $paymentBuilder = app(ManualPaymentBuilder::class);

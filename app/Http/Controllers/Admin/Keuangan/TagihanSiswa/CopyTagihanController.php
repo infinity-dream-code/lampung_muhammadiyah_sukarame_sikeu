@@ -182,15 +182,29 @@ class CopyTagihanController extends Controller
                     ->where('BILLCD', $oldBill->BILLCD)
                     ->get();
 
-                foreach ($details as $detail) {
+                if ($details->isEmpty()) {
+                    $master = mst_tagihan::query()
+                        ->where('tagihan', $tagihanBaruNm)
+                        ->first();
                     scctbill_detail::create([
-                        'KodePost' => $detail->KodePost,
-                        'BILLAM' => $detail->BILLAM,
+                        'KodePost' => $master?->kodeAkun() ?? mst_tagihan::kodePenerimaan(),
+                        'BILLAM' => $newBill->BILLAM,
                         'CUSTID' => $newBill->CUSTID,
                         'tahun' => $billYear,
                         'periode' => $billMonth,
                         'BILLCD' => $newBill->BILLCD,
                     ]);
+                } else {
+                    foreach ($details as $detail) {
+                        scctbill_detail::create([
+                            'KodePost' => $detail->KodePost ?: mst_tagihan::kodePenerimaan(),
+                            'BILLAM' => $detail->BILLAM,
+                            'CUSTID' => $newBill->CUSTID,
+                            'tahun' => $billYear,
+                            'periode' => $billMonth,
+                            'BILLCD' => $newBill->BILLCD,
+                        ]);
+                    }
                 }
 
                 $copied++;

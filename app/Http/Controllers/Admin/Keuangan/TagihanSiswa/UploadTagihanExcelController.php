@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Imports\Keuangan\TagihanSiswa\ImportTagihanExcel;
 use App\Models\mst_tagihan;
 use App\Models\scctbill;
+use App\Models\scctbill_detail;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use App\Support\InputTagihanProcedure;
@@ -214,7 +215,7 @@ class UploadTagihanExcelController extends Controller
         $request->validate([
             'tagihan' => ['required'],
             'periode_tahun' => ['required', 'integer', 'digits:4', 'min:2000', 'max:2099'],
-            'periode_bulan' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'periode_bulan' => ['required', 'integer', 'min:1', 'max:12'],
         ], ValidationMessage::messages(), ValidationMessage::attributes());
 
         $data = Cache::get($this->cacheKey);
@@ -228,18 +229,10 @@ class UploadTagihanExcelController extends Controller
         }
 
         $nmTagihan = trim((string) $tagihan->tagihan);
-        $isSpp = str_contains(strtoupper($nmTagihan), 'SPP');
         $isNyicil = (string) ((int) ($tagihan->isINSTALLMENT ?? 0));
 
-        // SPP: tahun+bulan (202609). Selain SPP: tahun saja (2026).
-        if ($isSpp) {
-            if (!$request->filled('periode_bulan')) {
-                return response()->json(['message' => 'Untuk tagihan SPP, periode bulan wajib diisi.'], 422);
-            }
-            $bta = sprintf('%04d%02d', (int) $request->periode_tahun, (int) $request->periode_bulan);
-        } else {
-            $bta = sprintf('%04d', (int) $request->periode_tahun);
-        }
+        // Semua jenis tagihan: tahun + bulan (contoh 202609).
+        $bta = sprintf('%04d%02d', (int) $request->periode_tahun, (int) $request->periode_bulan);
 
         try {
             $skippedInactive = [];
@@ -301,6 +294,14 @@ class UploadTagihanExcelController extends Controller
                     $failedRows[] = $nocust;
                     continue;
                 }
+
+                $this->ensureBillDetailForSiswa(
+                    (int) $siswa->CUSTID,
+                    $nmTagihan,
+                    $bta,
+                    $nominal,
+                    $tagihan->kodeAkun()
+                );
 
                 $insertedCount++;
             }
@@ -408,12 +409,52 @@ class UploadTagihanExcelController extends Controller
             'isINSTALLABLE' => ((int) $isNyicil === 1) ? 1 : 0,
         ]);
 
+        $this->ensureBillDetailForSiswa($custId, $billNm, $billac, $nominal, mst_tagihan::kodePenerimaan());
+
         Log::info('input-tagihan.direct.ok', [
             'custid' => $custId,
             'nocust' => $siswa->NOCUST,
             'billnm' => $billNm,
             'billac' => $billac,
             'nominal' => $nominal,
+        ]);
+    }
+
+    private function ensureBillDetailForSiswa(int $custId, string $billNm, string $billac, int $nominal, string $kodePost): void
+    {
+        $bill = scctbill::query()
+            ->where('CUSTID', $custId)
+            ->where('BILLNM', $billNm)
+            ->where('BILLAC', $billac)
+            ->where('FSTSBolehBayar', 1)
+            ->orderByDesc('FUrutan')
+            ->first();
+
+        if (!$bill) {
+            return;
+        }
+
+        $kodePost = trim($kodePost) !== '' ? trim($kodePost) : mst_tagihan::kodePenerimaan();
+        $exists = scctbill_detail::query()
+            ->where('CUSTID', $custId)
+            ->where('BILLCD', $bill->BILLCD)
+            ->where('KodePost', $kodePost)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        $tahun = substr((string) $billac, 0, 4);
+        $bulan = strlen((string) $billac) >= 6 ? substr((string) $billac, 4, 2) : date('m');
+
+        scctbill_detail::create([
+            'KodePost' => $kodePost,
+            'CUSTID' => $custId,
+            'BILLAM' => $nominal,
+            'tahun' => $tahun,
+            'periode' => $bulan,
+            'BILLCD' => $bill->BILLCD,
         ]);
     }
 

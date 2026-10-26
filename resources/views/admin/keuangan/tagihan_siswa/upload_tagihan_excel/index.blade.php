@@ -145,10 +145,12 @@
                             </div>
                             <div class="col-sm-6" id="periode_bulan_wrap">
                                 <select class="form-select" id="periode_bulan" name="periode_bulan"
-                                        data-control="select2" data-placeholder="Pilih bulan" data-allow-clear="true">
-                                    <option value="">Semua (tanpa bulan)</option>
+                                        required data-control="select2" data-placeholder="Pilih bulan">
                                     @foreach($bulanList as $bulan => $label)
-                                        <option value="{{ $bulan }}">{{ $label }}</option>
+                                        <option value="{{ $bulan }}"
+                                            @selected(($periode_bulan_default ?? date('n')) == $bulan)>
+                                            {{ $label }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -159,8 +161,7 @@
                             <span class="badge bg-primary" id="periode_preview">-</span>
                         </div>
                         <div class="form-text" id="periode_help">
-                            <span data-help="spp">SPP: pilih tahun + bulan (contoh BTA <strong>202609</strong>). Wajib pilih bulan.</span>
-                            <span data-help="tahun" class="d-none">Selain SPP: cukup tahun. Bulan otomatis <strong>Semua</strong> → BTA contoh <strong>2026</strong>.</span>
+                            Pilih tahun + bulan untuk semua jenis tagihan (contoh BTA <strong>202609</strong>).
                         </div>
                     </div>
                 </div>
@@ -397,65 +398,11 @@
             return formData;
         }
 
-        function isSelectedTagihanSpp() {
-            const $tagihan = $('#tagihan');
-            const val = $tagihan.val();
-            if (!val) {
-                return false;
-            }
-            const $opt = $tagihan.find('option[value="' + val + '"]');
-            const flag = String($opt.attr('data-is-spp') ?? '');
-            if (flag === '1') {
-                return true;
-            }
-            if (flag === '0') {
-                return false;
-            }
-            return String($opt.text() || '').toUpperCase().includes('SPP');
-        }
-
-        function setBulanValue(value) {
-            const $bulan = $('#periode_bulan');
-            $bulan.val(value === null || value === undefined ? '' : String(value));
-            if ($bulan.hasClass('select2-hidden-accessible')) {
-                $bulan.trigger('change.select2');
-            } else {
-                $bulan.trigger('change');
-            }
-        }
-
-        function syncPeriodeByTagihan() {
-            const isSpp = isSelectedTagihanSpp();
-            const $bulanWrap = $('#periode_bulan_wrap');
-            const $tahunWrap = $('#periode_tahun_wrap');
-
-            $('#periode_help [data-help="spp"]').toggleClass('d-none', !isSpp);
-            $('#periode_help [data-help="tahun"]').toggleClass('d-none', isSpp);
-
-            if (isSpp) {
-                $bulanWrap.removeClass('d-none');
-                $tahunWrap.removeClass('col-12').addClass('col-sm-6');
-                if (!$('#periode_bulan').val()) {
-                    setBulanValue('{{ (int) ($periode_bulan_default ?? date('n')) }}');
-                }
-            } else {
-                // Selain SPP: pakai "Semua (tanpa bulan)" — BTA tahun saja
-                $bulanWrap.addClass('d-none');
-                $tahunWrap.removeClass('col-sm-6').addClass('col-12');
-                setBulanValue('');
-            }
-
-            syncPeriodePreview();
-        }
-
         function syncPeriodePreview() {
             const tahun = $('#periode_tahun').val();
-            const isSpp = isSelectedTagihanSpp();
-            const bulanVal = isSpp ? $('#periode_bulan').val() : '';
+            const bulanVal = $('#periode_bulan').val();
             if (tahun && bulanVal) {
                 $('#periode_preview').text(`${tahun}${String(bulanVal).padStart(2, '0')}`);
-            } else if (tahun) {
-                $('#periode_preview').text(tahun);
             } else {
                 $('#periode_preview').text('-');
             }
@@ -527,7 +474,7 @@
                         // Pastikan nilai Select2 ikut terkirim
                         formData.set('tagihan', $('#tagihan').val() || '');
                         formData.set('periode_tahun', $('#periode_tahun').val() || '');
-                        formData.set('periode_bulan', isSelectedTagihanSpp() ? ($('#periode_bulan').val() || '') : '');
+                        formData.set('periode_bulan', $('#periode_bulan').val() || '');
                         loadingAlert('Menyimpan data tagihan');
                         url = '{{route('admin.keuangan.tagihan-siswa.upload-tagihan-excel.validate-excel')}}';
                         method = 'POST';
@@ -617,10 +564,7 @@
             });
 
             $('#periode_tahun, #periode_bulan').on('change', syncPeriodePreview);
-            $('#tagihan').on('change select2:select select2:clear', syncPeriodeByTagihan);
-            // Setelah Select2 siap, samakan UI (UTS/UAS → sembunyikan bulan)
-            setTimeout(syncPeriodeByTagihan, 0);
-            setTimeout(syncPeriodeByTagihan, 300);
+            setTimeout(syncPeriodePreview, 0);
 
             document.querySelectorAll('.js-clear-import').forEach(function (button) {
                 button.addEventListener('click', function () {

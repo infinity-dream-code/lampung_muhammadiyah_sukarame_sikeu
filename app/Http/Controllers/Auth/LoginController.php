@@ -293,7 +293,7 @@ SVG;
 
     protected function redirectTo(): string
     {
-        return "/admin";
+        return PersistentLogin::continueUrl(request());
     }
 
     public function __construct()

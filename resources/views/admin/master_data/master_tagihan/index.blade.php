@@ -112,6 +112,7 @@
                                 <label class="form-label required" for="tagihan">Nama Tagihan</label>
                                 <input type="text" class="form-control" name="tagihan" id="tagihan" autocomplete="off"
                                        placeholder="Contoh: SPP" required>
+                                <div class="form-text">Otomatis masuk ke kode akun <strong>101</strong> (Penerimaan / Kas Masuk).</div>
                                 <div class="invalid-feedback" role="alert"><strong></strong></div>
                             </div>
                             <div class="mb-3">

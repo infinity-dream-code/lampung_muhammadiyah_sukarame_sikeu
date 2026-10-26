@@ -19,8 +19,17 @@ class KeepAliveController extends Controller
         }
 
         $user = Auth::user();
+        if (!$user && PersistentLogin::hasCookie($request)) {
+            try {
+                PersistentLogin::recreateSession($request);
+                $user = PersistentLogin::restoreFromRequest($request);
+            } catch (\Throwable) {
+                $user = Auth::user();
+            }
+        }
+
         if ($user) {
-            PersistentLogin::queue($user);
+            PersistentLogin::queue($user, $request);
         }
 
         if ($request->hasSession()) {
@@ -32,6 +41,7 @@ class KeepAliveController extends Controller
             'ok' => true,
             'authenticated' => (bool) $user,
             'token' => csrf_token(),
+            'redirect' => $user ? PersistentLogin::continueUrl($request) : null,
         ])->header('Cache-Control', 'private, no-store, no-cache, must-revalidate')
             ->header('Pragma', 'no-cache')
             ->header('CDN-Cache-Control', 'no-store');

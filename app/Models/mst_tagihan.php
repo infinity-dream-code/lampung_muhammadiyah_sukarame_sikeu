@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Cache;
 
 class mst_tagihan extends Model
 {
+    public const KODE_PENERIMAAN = '101';
+
     protected $connection = "DATA_MYSQL";
 
     protected $table = "mst_tagihan";
@@ -64,6 +66,35 @@ class mst_tagihan extends Model
     public static function flushInstallmentCache(): void
     {
         Cache::forget('mst_tagihan_installment_map');
+    }
+
+    public static function kodePenerimaan(): string
+    {
+        return self::KODE_PENERIMAAN;
+    }
+
+    public function kodeAkun(): string
+    {
+        $kode = trim((string) ($this->kode ?? ''));
+
+        return $kode !== '' ? $kode : self::KODE_PENERIMAAN;
+    }
+
+    public static function ensureAkunPenerimaan(): void
+    {
+        if (!u_akun::query()->where('KodeAkun', self::KODE_PENERIMAAN)->exists()) {
+            u_akun::query()->create([
+                'KodeAkun' => self::KODE_PENERIMAAN,
+                'NamaAkun' => 'PENERIMAAN / KAS MASUK',
+                'NoRek' => '0',
+            ]);
+        }
+
+        static::query()
+            ->where(function ($q) {
+                $q->whereNull('kode')->orWhere('kode', '');
+            })
+            ->update(['kode' => self::KODE_PENERIMAAN]);
     }
 
     protected static function booted(): void

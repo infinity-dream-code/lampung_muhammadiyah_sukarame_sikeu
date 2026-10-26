@@ -103,9 +103,29 @@
         }).then(function (data) {
             if (data && data.token) {
                 applyToken(data.token);
-                return data.token;
             }
-            return null;
+
+            if (data && data.authenticated) {
+                try {
+                    sessionStorage.removeItem('mit_sukarame_auth_reload');
+                } catch (e) {
+                    //
+                }
+            }
+
+            if (data && data.authenticated === false) {
+                try {
+                    if (!sessionStorage.getItem('mit_sukarame_auth_reload')) {
+                        sessionStorage.setItem('mit_sukarame_auth_reload', '1');
+                        window.location.reload();
+                    }
+                } catch (e) {
+                    //
+                }
+                return null;
+            }
+
+            return data && data.token ? data.token : null;
         }).catch(function () {
             return null;
         }).finally(function () {

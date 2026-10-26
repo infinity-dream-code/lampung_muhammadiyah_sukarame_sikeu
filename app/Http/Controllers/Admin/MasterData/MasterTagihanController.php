@@ -31,6 +31,7 @@ class MasterTagihanController extends Controller
     {
         return [
             ['data' => null, 'name' => 'no', 'className' => 'text-center', 'columnType' => 'no'],
+            ['data' => 'kode', 'name' => 'Kode Akun', 'searchable' => true, 'orderable' => true],
             ['data' => 'tagihan', 'name' => 'Nama Tagihan', 'searchable' => true, 'orderable' => true],
             ['data' => 'isINSTALLMENT_label', 'name' => 'Status Dapat Di Cicil', 'searchable' => false, 'orderable' => true],
         ];
@@ -60,11 +61,19 @@ class MasterTagihanController extends Controller
             }
         }
 
+        mst_tagihan::ensureAkunPenerimaan();
+
         $totalRecords = mst_tagihan::count();
-        $totalRecordswithFilter = mst_tagihan::where('tagihan', 'like', '%' . $searchValue . '%')->count();
+        $totalRecordswithFilter = mst_tagihan::where(function ($q) use ($searchValue) {
+            $q->where('tagihan', 'like', '%' . $searchValue . '%')
+                ->orWhere('kode', 'like', '%' . $searchValue . '%');
+        })->count();
 
         $records = mst_tagihan::orderBy($columnName, $columnSortOrder)
-            ->where('tagihan', 'like', '%' . $searchValue . '%')
+            ->where(function ($q) use ($searchValue) {
+                $q->where('tagihan', 'like', '%' . $searchValue . '%')
+                    ->orWhere('kode', 'like', '%' . $searchValue . '%');
+            })
             ->skip($start)
             ->take($rowperpage)
             ->get()
@@ -109,11 +118,12 @@ class MasterTagihanController extends Controller
             DB::connection('DATA_MYSQL')->beginTransaction();
 
             $nextUrut = (int) mst_tagihan::max('urut') + 1;
+            mst_tagihan::ensureAkunPenerimaan();
 
             mst_tagihan::create([
                 'urut' => $nextUrut,
                 'tagihan' => strtoupper(trim($request->tagihan)),
-                'kode' => null,
+                'kode' => mst_tagihan::kodePenerimaan(),
                 'isINSTALLMENT' => (int) $request->isINSTALLMENT,
             ]);
 

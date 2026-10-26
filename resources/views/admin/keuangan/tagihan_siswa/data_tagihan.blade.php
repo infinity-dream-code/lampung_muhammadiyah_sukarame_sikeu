@@ -230,6 +230,10 @@
                                 <span class="ri-info-card-line me-2"></span>
                                 Cetak Kartu Siswa
                             </button>
+                            <button type="button" class="btn btn-facebook" id="cetak-kuitansi-2000">
+                                <span class="ri-info-card-line me-2"></span>
+                                Cetak Kuitansi +2000
+                            </button>
                             <button type="button" class="btn btn-google-plus btn-print-rekap">
                                 <span class="ri-file-pdf-2-line me-2"></span>
                                 Cetak Rekap
@@ -491,7 +495,7 @@
 
     <script src="{{asset('main/libs/select2/select2.js')}}"></script>
     <script src="{{asset('main/libs/datatables-bs5/datatables-bootstrap5.js')}}"></script>
-    <script src="{{asset('js/va-format.js')}}?v=20260619"></script>
+    <script src="{{asset('js/va-format.js')}}?v=20261026-bcn"></script>
     <script src="{{asset('js/datatableCustom/Datatable-0-4.js?v=20260924-id3')}}?v=20260724-excel-total-fix"></script>
     <script>
         window.DATA_TAGIHAN_BOOT = {
@@ -1281,7 +1285,7 @@
             const userName = @json(Auth::user()?->name ?? Auth::user()?->users ?? '');
             const domisili = @json(config('app.domisili'));
             const tanggalSekarang = "{{ \Carbon\Carbon::now()->locale('id')->isoFormat('dddd, D MMMM YYYY') }}";
-            const APP_VA_PREFIX = @json((string) (config('app.nova') ?: '77726'));
+            const APP_VA_PREFIX = @json((string) (config('app.nova') ?: '777726'));
             const showVA = (nis) => typeof formatNoVA === 'function'
                 ? formatNoVA(nis, APP_VA_PREFIX)
                 : (() => {
@@ -1417,6 +1421,139 @@
                     errorAlert(e.message);
                 }
             }
+
+            function formatMetodePembayaran(data, noreff) {
+                if (String(noreff || '').trim().toLowerCase() === 'mobile') {
+                    return 'ANDROID';
+                }
+                const descriptions = {
+                    '1140000': 'Manual Tunai',
+                    '1140001': 'Manual BMI',
+                    '1140002': 'Manual Saldo',
+                    '1140003': 'Transfer Bank Lain',
+                    '1140004': 'INFAQ',
+                    '1140005': 'Transfer Bank BRI',
+                    '1200001': 'Loket Manual - Beasiswa',
+                    '1200002': 'Loket Manual - Potongan',
+                    '1': 'H2H VA BMI - ATM',
+                    '2': 'H2H VA BMI - Teller',
+                    '3': 'H2H VA BMI - IBANK',
+                    '4': 'H2H VA BMI - EDC',
+                    '5': 'H2H VA BMI - MOBILE',
+                    '6': 'ANDROID',
+                    null: 'Nomor VA',
+                    '': 'Nomor VA'
+                };
+                return descriptions[data] || data || 'Nomor VA';
+            }
+
+            function generateKuitansi(biayaLayanan = false) {
+                const data = DT[`${dtOptions.tableId}`].rows({selected: true}).data().toArray();
+                if (!data[0]) {
+                    warningAlert('Silahkan pilih minimal satu tagihan!');
+                    return;
+                }
+
+                const firstNis = data[0]?.NOCUST ?? data[0]?.nocust ?? '';
+                const firstCust = data[0]?.CUSTID ?? '';
+                const allSame = data.every((row) => {
+                    const nis = row.NOCUST ?? row.nocust ?? '';
+                    const cust = row.CUSTID ?? '';
+                    return (firstNis && nis === firstNis) || (firstCust && cust === firstCust);
+                });
+                if (!allSame) {
+                    warningAlert('Silahkan pilih siswa yang sama!');
+                    return;
+                }
+
+                const siswa = data[0];
+                const nocust = siswa.NOCUST ?? siswa.nocust;
+                const hasNis = nocust && nocust !== '-' && nocust !== '';
+                const metodeLabel = formatMetodePembayaran(siswa.FIDBANK ?? '', siswa.BILL_NOREFF ?? '');
+
+                const mainTable = [
+                    [(hasNis ? 'NIS ' : 'No. Pendaftaran'), ': ' + (hasNis ? nocust : (siswa.NUM2ND ?? '-')), 'Unit', ': ' + (siswa.CODE02 ?? '-')],
+                    [(hasNis ? 'No. VA ' : '-'), ': ' + (hasNis ? (siswa.NOVA || showVA(nocust)) : ''), 'Kelas', ': ' + ((siswa.DESC02 ?? '') + ' ' + (siswa.DESC03 ?? '')).trim()],
+                    ['Nama ', ': ' + (siswa.NMCUST ?? siswa.nmcust ?? '-'), 'Metode Bayar', ': ' + metodeLabel],
+                ];
+
+                const tableBody = [
+                    ['#', 'Nama Tagihan', 'Periode', 'Tagihan', 'Bayar', 'Tanggal Bayar']
+                        .map((h) => ({text: h, style: 'tableHeader'})),
+                ];
+
+                let totalTagihan = 0;
+                let totalBayar = 0;
+
+                data.forEach((item, index) => {
+                    let tanggalBayar = item.PAIDDT;
+                    if (tanggalBayar && tanggalBayar !== '' && tanggalBayar !== '0000-00-00 00:00:00') {
+                        tanggalBayar = typeof formatTanggalIndonesia === 'function'
+                            ? formatTanggalIndonesia(tanggalBayar)
+                            : tanggalBayar;
+                    } else {
+                        tanggalBayar = '-';
+                    }
+
+                    const billAm = Number(item.BILLAM_TOTAL ?? item.BILLAM ?? 0);
+                    const billPaid = Number(item.BILLPAID ?? 0);
+                    totalTagihan += billAm;
+                    totalBayar += billPaid;
+
+                    tableBody.push([
+                        {text: index + 1, alignment: 'center'},
+                        {text: item.BILLNM ?? '-', alignment: 'left'},
+                        {text: item.BILLAC ?? item.BTA ?? '-', alignment: 'left'},
+                        {text: formatRupiah(billAm), alignment: 'right'},
+                        {text: formatRupiah(billPaid), alignment: 'right'},
+                        {text: tanggalBayar, alignment: 'left'},
+                    ]);
+                });
+
+                if (biayaLayanan) {
+                    tableBody.push([
+                        {colSpan: 4, text: 'Biaya Layanan', alignment: 'right', style: 'tableHeader'},
+                        {}, {}, {},
+                        {text: formatRupiah(2000), alignment: 'right'},
+                        {},
+                    ]);
+                }
+
+                tableBody.push([
+                    {colSpan: 4, text: 'Total', alignment: 'right', style: 'tableHeader'},
+                    {}, {}, {},
+                    {text: formatRupiah(totalBayar + (biayaLayanan ? 2000 : 0)), alignment: 'right'},
+                    {},
+                ]);
+
+                const content = [
+                    {
+                        table: {widths: ['15%', '35%', '15%', '35%'], body: mainTable},
+                        layout: 'noBorders',
+                    },
+                    {text: '', margin: [0, 5, 0, 5]},
+                    {
+                        table: {
+                            widths: ['5%', '25%', '15%', '18%', '18%', '19%'],
+                            body: tableBody,
+                        },
+                        layout: {
+                            fillColor: (rowIndex) => rowIndex === 0 ? '#ededed' : null,
+                            hLineWidth: () => 0.5,
+                            vLineWidth: () => 0.5,
+                        },
+                        margin: [0, 0, 0, 10],
+                        fontSize: 12,
+                    },
+                ];
+
+                generatePdf('KUITANSI', content, siswa.CODE02);
+            }
+
+            document.getElementById('cetak-kuitansi-2000').addEventListener('click', function (e) {
+                e.preventDefault();
+                generateKuitansi(true);
+            });
 
             document.getElementById('cetak-kartu-siswa').addEventListener('click', async function (e) {
                 e.preventDefault();

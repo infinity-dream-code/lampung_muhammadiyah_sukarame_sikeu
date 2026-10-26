@@ -30,8 +30,8 @@ return [
     'email' => env('APP_EMAIL', 'ypisabkho@gmail.com'),
     'telepon' => env('APP_TELEPON', 'SIKEU'),
     'domisili' => env('APP_DOMISILI', 'Kota Bandar Lampung'),
-    // Prefix VA Open Payment: 777 26 → 77726
-    'nova' => env('APP_NOVA') ?: '77726',
+    // Prefix VA Open Payment / BCN: 777726
+    'nova' => env('APP_NOVA') ?: '777726',
     'biaya_admin' => env('BIAYA_ADMIN', 0),
     'dummy_seeder' => env('DUMMY_SEEDER',false),
     'demo_mode' => env('DEMO_MODE',false),

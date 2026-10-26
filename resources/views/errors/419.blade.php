@@ -15,7 +15,7 @@
                 return;
             }
             sessionStorage.removeItem(key);
-            window.location.href = {{ Illuminate\Support\Js::from(url('/admin')) }};
+            window.location.replace(window.location.pathname + window.location.search + window.location.hash);
         })();
     </script>
 @endsection

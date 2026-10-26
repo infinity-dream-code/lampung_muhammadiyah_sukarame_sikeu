@@ -2,7 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Providers\RouteServiceProvider;
+use App\Support\PersistentLogin;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,7 +21,12 @@ class RedirectIfAuthenticated
 
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
-                return redirect(RouteServiceProvider::HOME);
+                $intended = $request->session()->pull('url.intended');
+                if (is_string($intended) && !PersistentLogin::isAuthUrl($intended)) {
+                    return redirect()->to($intended);
+                }
+
+                return redirect()->to(PersistentLogin::continueUrl($request));
             }
         }
 

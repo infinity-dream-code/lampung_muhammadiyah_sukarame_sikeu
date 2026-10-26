@@ -18,9 +18,9 @@ class scctcust extends Model
 
     public static function vaPrefix(): string
     {
-        $raw = preg_replace('/\D/', '', (string) config('app.nova', '77726'));
+        $raw = preg_replace('/\D/', '', (string) config('app.nova', '777726'));
 
-        return $raw !== '' ? $raw : '77726';
+        return $raw !== '' ? $raw : '777726';
     }
 
     public static function vaTotalLength(): int

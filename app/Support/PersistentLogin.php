@@ -42,15 +42,18 @@ class PersistentLogin
         $guard->setUser($user);
     }
 
-    public static function queue(?CyberKey $user): void
+    public static function queue(?CyberKey $user, ?Request $request = null): void
     {
         if (!$user) {
             return;
         }
 
+        $request ??= request();
+        $value = self::encodePayload($user, $request);
+
         Cookie::queue(cookie(
             self::COOKIE,
-            self::encodePayload($user),
+            $value,
             self::lifetimeMinutes(),
             config('session.path', '/'),
             config('session.domain'),
@@ -59,6 +62,10 @@ class PersistentLogin
             false,
             config('session.same_site', 'lax')
         ));
+
+        if ($request instanceof Request) {
+            $request->cookies->set(self::COOKIE, $value);
+        }
     }
 
     public static function forget(): void
@@ -101,23 +108,110 @@ class PersistentLogin
 
     public static function unauthenticatedResponse(Request $request): Response
     {
-        if (self::isAjaxRequest($request)) {
-            return response()->json([
-                'ok' => true,
-                'retry' => true,
-                'token' => csrf_token(),
-            ], 401);
+        self::rememberContinueUrl($request);
+
+        $user = null;
+        try {
+            self::recreateSession($request);
+            $user = self::restoreFromRequest($request);
+        } catch (Throwable $e) {
+            if (self::isTransient($e) && self::isAjaxRequest($request)) {
+                return self::retryJson($request);
+            }
         }
 
-        // Cookie masih ada: recreate session + reload ke URL yang sama, jangan tendang ke login.
-        if (self::hasCookie($request) && !$request->boolean('_auth_retry')) {
-            self::recreateSession($request);
-            self::restoreFromRequest($request);
+        $target = self::continueUrl($request);
 
-            return redirect()->to($request->fullUrlWithQuery(['_auth_retry' => 1]));
+        // Cookie / user masih ada: jangan ke login. Recreate lalu kembali ke halaman sebelumnya.
+        if ($user || self::hasCookie($request)) {
+            if (self::isAjaxRequest($request)) {
+                return self::retryJson($request, $target);
+            }
+
+            if ($user) {
+                return redirect()->to($target);
+            }
+
+            if (!$request->boolean('_sess_retry')) {
+                return redirect()->to(self::withQuery($target, ['_sess_retry' => 1]));
+            }
+        }
+
+        if (self::isAjaxRequest($request)) {
+            return self::retryJson($request, $target);
         }
 
         return redirect()->guest(route('login'));
+    }
+
+    public static function retryJson(Request $request, ?string $redirect = null, int $status = 401): Response
+    {
+        return response()->json([
+            'ok' => true,
+            'retry' => true,
+            'authenticated' => (bool) Auth::user(),
+            'token' => csrf_token(),
+            'redirect' => $redirect ?: self::continueUrl($request),
+        ], $status);
+    }
+
+    public static function continueUrl(Request $request): string
+    {
+        $candidates = [
+            self::cleanUrl($request->fullUrl()),
+            $request->hasSession() ? $request->session()->get('url.intended') : null,
+            $request->headers->get('Referer'),
+            url()->previous(),
+            self::pathFromCookie($request),
+            url('/admin'),
+        ];
+
+        foreach ($candidates as $url) {
+            if (!is_string($url) || trim($url) === '') {
+                continue;
+            }
+
+            $absolute = self::toAbsoluteUrl($url, $request);
+            if (!self::isSafeInternalUrl($absolute, $request)) {
+                continue;
+            }
+
+            $absolute = self::cleanUrl($absolute);
+            if (self::isAuthUrl($absolute)) {
+                continue;
+            }
+
+            return $absolute;
+        }
+
+        return url('/admin');
+    }
+
+    public static function rememberContinueUrl(Request $request): void
+    {
+        if (!$request->hasSession() || !$request->isMethod('GET') || self::isAuthUrl($request->fullUrl())) {
+            return;
+        }
+
+        $url = self::cleanUrl($request->fullUrl());
+        $request->session()->put('url.intended', $url);
+        $request->session()->put('_last_visited_url', $url);
+    }
+
+    public static function isAuthUrl(?string $url): bool
+    {
+        if (!is_string($url) || $url === '') {
+            return true;
+        }
+
+        $path = trim((string) parse_url($url, PHP_URL_PATH), '/');
+
+        return $path === ''
+            || $path === 'login'
+            || $path === 'logout'
+            || $path === 'register'
+            || str_starts_with($path, 'password')
+            || str_starts_with($path, 'email/');
     }
 
     /**
@@ -152,16 +246,9 @@ class PersistentLogin
         foreach ([
             'unable to retrieve the session',
             'session store not set on request',
-            'failed to open stream',
-            'unable to create lockable file',
-            'unable to obtain lock',
-            'resource temporarily unavailable',
-            'being used by another process',
-            'permission denied',
-            'no such file or directory',
-            'session has already been started',
             'failed to read session',
             'session data corrupted',
+            'session has already been started',
             'unserialize',
         ] as $needle) {
             if (str_contains($haystack, $needle)) {
@@ -169,7 +256,7 @@ class PersistentLogin
             }
         }
 
-        return self::isTransient($e);
+        return false;
     }
 
     public static function isAjaxRequest(Request $request): bool
@@ -274,14 +361,109 @@ class PersistentLogin
         return null;
     }
 
-    private static function encodePayload(CyberKey $user): string
+    private static function encodePayload(CyberKey $user, ?Request $request = null): string
     {
         $encoded = rtrim(strtr(base64_encode(json_encode([
             'id' => $user->getAuthIdentifier(),
             'u' => (string) $user->users,
+            'p' => self::safePath($request),
         ], JSON_UNESCAPED_UNICODE)), '+/', '-_'), '=');
 
         return $encoded.'.'.self::signature($encoded);
+    }
+
+    private static function safePath(?Request $request): ?string
+    {
+        if (!$request instanceof Request) {
+            return null;
+        }
+
+        if (!$request->isMethod('GET') || self::isAuthUrl($request->fullUrl()) || $request->routeIs('admin.keep-alive')) {
+            $fromCookie = self::pathFromCookie($request);
+            if ($fromCookie) {
+                $path = parse_url($fromCookie, PHP_URL_PATH);
+                $query = parse_url($fromCookie, PHP_URL_QUERY);
+
+                return $path ? ($query ? $path.'?'.$query : $path) : null;
+            }
+
+            return null;
+        }
+
+        $uri = $request->getRequestUri();
+        if (!is_string($uri) || $uri === '' || strlen($uri) > 400) {
+            return $request->getPathInfo() ?: '/admin';
+        }
+
+        return self::cleanUrl($uri);
+    }
+
+    private static function pathFromCookie(Request $request): ?string
+    {
+        $raw = self::rawCookieValue($request);
+        if ($raw === null) {
+            return null;
+        }
+
+        try {
+            $data = self::decodePayload($raw);
+            $path = is_array($data) ? ($data['p'] ?? null) : null;
+
+            return is_string($path) && $path !== '' ? $path : null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    public static function cleanUrl(string $url): string
+    {
+        $parts = parse_url($url);
+        if ($parts === false) {
+            return $url;
+        }
+
+        $query = [];
+        parse_str($parts['query'] ?? '', $query);
+        unset($query['_sess_retry'], $query['_auth_retry'], $query['_retry'], $query['_ts']);
+
+        $path = $parts['path'] ?? '/';
+        if (!isset($parts['host'])) {
+            return $query ? $path.'?'.http_build_query($query) : $path;
+        }
+
+        $absolute = ($parts['scheme'] ?? request()?->getScheme() ?? 'https').'://'.$parts['host']
+            .(isset($parts['port']) ? ':'.$parts['port'] : '')
+            .$path;
+
+        return $query ? $absolute.'?'.http_build_query($query) : $absolute;
+    }
+
+    public static function withQuery(string $url, array $params): string
+    {
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url.$separator.http_build_query($params);
+    }
+
+    private static function toAbsoluteUrl(string $url, Request $request): string
+    {
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            return $url;
+        }
+
+        return $request->getSchemeAndHttpHost().(str_starts_with($url, '/') ? $url : '/'.$url);
+    }
+
+    private static function isSafeInternalUrl(string $url, Request $request): bool
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        if (is_string($host) && $host !== '' && strcasecmp($host, $request->getHost()) !== 0) {
+            return false;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?? '/';
+
+        return is_string($path) && str_starts_with($path, '/');
     }
 
     private static function decodePayload(string $raw): ?array
