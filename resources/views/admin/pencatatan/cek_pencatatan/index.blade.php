@@ -124,7 +124,7 @@
                             <select class="form-select" id="filter_akun_masuk" name="filter[akun_masuk]" data-control="select2">
                                 <option value="all">Semua</option>
                                 @foreach($akunMasuk as $item)
-                                    <option value="{{ $item->NamaAkunMasuk }}">{{ $item->NamaAkunMasuk }}</option>
+                                    <option value="{{ $item->KodeAkunMasuk }}">{{ $item->KodeAkunMasuk }} - {{ $item->NamaAkunMasuk }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -142,7 +142,7 @@
                             <select class="form-select" id="filter_akun_keluar" name="filter[akun_keluar]" data-control="select2">
                                 <option value="all">Semua</option>
                                 @foreach($akunKeluar as $item)
-                                    <option value="{{ $item->NamaAkunKeluar }}">{{ $item->NamaAkunKeluar }}</option>
+                                    <option value="{{ $item->KodeAkunKeluar }}">{{ $item->KodeAkunKeluar }} - {{ $item->NamaAkunKeluar }}</option>
                                 @endforeach
                             </select>
                         </div>

@@ -44,6 +44,8 @@ trait StoresJurnalKas
      */
     protected function insertJurnal(array $extra): akt_jurnal
     {
+        PencatatanJurnalTable::ensureLedgerColumns();
+
         $payload = array_merge([
             'no_tran' => null,
             'no_ref' => null,

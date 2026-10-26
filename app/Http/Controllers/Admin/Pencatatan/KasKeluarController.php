@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Models\akun_kas_keluar;
 use App\Models\akt_jurnal;
 use App\Models\ValidationMessage;
+use App\Support\PencatatanAkunLookup;
+use App\Support\PencatatanAkunTable;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
 use Illuminate\Http\Request;
@@ -27,6 +29,8 @@ class KasKeluarController extends Controller
     {
         $akunKeluar = collect();
         try {
+            PencatatanJurnalTable::ensureLedgerColumns();
+            PencatatanAkunTable::ensureKeluar();
             if (Schema::connection('DATA_MYSQL')->hasTable('akun_kas_keluar')) {
                 $akunKeluar = akun_kas_keluar::query()
                     ->orderBy('KodeAkunKeluar')
@@ -72,6 +76,7 @@ class KasKeluarController extends Controller
     public function getData(Request $request)
     {
         try {
+            PencatatanJurnalTable::ensureLedgerColumns();
             $draw = (int) $request->get('draw', 0);
             $start = (int) $request->get('start', 0);
             $rowperpage = (int) $request->get('length', 10);
@@ -90,6 +95,7 @@ class KasKeluarController extends Controller
                     $columnName = match ($requested) {
                         'debet' => 'debet',
                         'sumber_kas' => PencatatanJurnalTable::hasNoRefColumn() ? 'no_ref' : 'keterangan',
+                        'NamaAkunKeluar' => PencatatanJurnalTable::hasAkunKeluarColumn() ? 'NamaAkunKeluar' : 'tanggal',
                         default => $requested,
                     };
                 }
@@ -124,6 +130,9 @@ class KasKeluarController extends Controller
             if (PencatatanJurnalTable::hasNoRefColumn()) {
                 $select[] = 'no_ref';
             }
+            if (PencatatanJurnalTable::hasKodePerkiraanColumn()) {
+                $select[] = 'kode_perkiraan';
+            }
 
             $records = $filteredQuery
                 ->orderBy($columnName, in_array($columnSortOrder, ['asc', 'desc'], true) ? $columnSortOrder : 'desc')
@@ -133,7 +142,11 @@ class KasKeluarController extends Controller
                 ->get($select)
                 ->map(function ($item) {
                     $row = $item->toArray();
-                    $row['NamaAkunKeluar'] = $row['NamaAkunKeluar'] ?? '-';
+                    $row['NamaAkunKeluar'] = PencatatanAkunLookup::namaKeluar(
+                        $row['NamaAkunKeluar'] ?? null,
+                        $row['kode_perkiraan'] ?? null,
+                        $row['no_bukti'] ?? null
+                    );
                     $row['debet'] = (int) ($row['debet'] ?? 0);
                     $row['sumber_kas'] = trim((string) ($row['no_ref'] ?? '')) ?: '-';
                     $row['periode'] = PencatatanPeriode::label($row['periode'] ?? '', $row['tahun'] ?? '');
@@ -211,6 +224,7 @@ class KasKeluarController extends Controller
                 'periode' => $period['periode'],
                 'buktiurl' => $buktiurl,
                 'no_ref' => $sumberKas,
+                'kode_perkiraan' => $kodeAkun,
                 'NamaAkunMasuk' => null,
                 'NamaAkunKeluar' => $akun->NamaAkunKeluar,
             ]);

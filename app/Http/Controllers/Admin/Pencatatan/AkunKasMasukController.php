@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Pencatatan;
 use App\Http\Controllers\Controller;
 use App\Models\akun_kas_masuk;
 use App\Models\ValidationMessage;
+use App\Support\PencatatanAkunTable;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,8 @@ class AkunKasMasukController extends Controller
 
     public function index()
     {
+        PencatatanAkunTable::ensureMasuk();
+
         return view('admin.pencatatan.akun_kas_masuk.index', [
             'title' => $this->title,
             'mainTitle' => $this->mainTitle,
@@ -42,14 +45,27 @@ class AkunKasMasukController extends Controller
     public function getData(Request $request)
     {
         try {
-            $draw = $request->get('draw');
-            $start = $request->get('start');
-            $rowperpage = $request->get('length');
+            if (!PencatatanAkunTable::ensureMasuk()) {
+                return response()->json([
+                    'draw' => (int) $request->get('draw', 0),
+                    'recordsTotal' => 0,
+                    'recordsFiltered' => 0,
+                    'data' => [],
+                    'message' => 'Tabel akun_kas_masuk belum tersedia di database',
+                ]);
+            }
+
+            $draw = (int) $request->get('draw', 0);
+            $start = max(0, (int) $request->get('start', 0));
+            $rowperpage = (int) $request->get('length', 25);
+            if ($rowperpage <= 0) {
+                $rowperpage = 25;
+            }
 
             $columnIndexArr = $request->get('order', []);
             $columnNameArr = $request->get('columns', []);
             $searchArr = $request->get('search', []);
-            $searchValue = $searchArr['value'] ?? '';
+            $searchValue = is_array($searchArr) ? trim((string) ($searchArr['value'] ?? '')) : '';
 
             $columnName = 'KodeAkunMasuk';
             $columnSortOrder = 'asc';
@@ -62,15 +78,26 @@ class AkunKasMasukController extends Controller
                 }
             }
 
-            $searchable = ['KodeAkunMasuk', 'NamaAkunMasuk', 'NoRekMasuk'];
-            $totalRecords = akun_kas_masuk::count();
-            $totalRecordswithFilter = akun_kas_masuk::query()
-                ->whereAny($searchable, 'like', '%' . $searchValue . '%')
-                ->count();
+            $allowedSort = ['KodeAkunMasuk', 'NamaAkunMasuk', 'NoRekMasuk'];
+            if (!in_array($columnName, $allowedSort, true)) {
+                $columnName = 'KodeAkunMasuk';
+            }
 
-            $records = akun_kas_masuk::query()
-                ->orderBy($columnName, $columnSortOrder)
-                ->whereAny($searchable, 'like', '%' . $searchValue . '%')
+            $query = akun_kas_masuk::query();
+            if ($searchValue !== '') {
+                $like = '%' . $searchValue . '%';
+                $query->where(function ($q) use ($like) {
+                    $q->where('KodeAkunMasuk', 'like', $like)
+                        ->orWhere('NamaAkunMasuk', 'like', $like)
+                        ->orWhere('NoRekMasuk', 'like', $like);
+                });
+            }
+
+            $totalRecords = akun_kas_masuk::query()->count();
+            $totalRecordswithFilter = (clone $query)->count();
+
+            $records = $query
+                ->orderBy($columnName, in_array($columnSortOrder, ['asc', 'desc'], true) ? $columnSortOrder : 'asc')
                 ->skip($start)
                 ->take($rowperpage)
                 ->get()
@@ -81,7 +108,7 @@ class AkunKasMasukController extends Controller
                 ->toArray();
 
             return response()->json([
-                'draw' => intval($draw),
+                'draw' => $draw,
                 'recordsTotal' => $totalRecords,
                 'recordsFiltered' => $totalRecordswithFilter,
                 'data' => $records,
@@ -94,11 +121,12 @@ class AkunKasMasukController extends Controller
             ]);
 
             return response()->json([
-                'draw' => intval($request->get('draw', 0)),
+                'draw' => (int) $request->get('draw', 0),
                 'recordsTotal' => 0,
                 'recordsFiltered' => 0,
                 'data' => [],
                 'message' => 'Gagal memuat data akun kas masuk',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -137,6 +165,10 @@ class AkunKasMasukController extends Controller
         }
 
         try {
+            if (!PencatatanAkunTable::ensureMasuk()) {
+                return response()->json(['message' => 'Tabel akun kas masuk belum tersedia di database'], 422);
+            }
+
             DB::connection('DATA_MYSQL')->beginTransaction();
             akun_kas_masuk::create([
                 'KodeAkunMasuk' => $kode,

@@ -20,7 +20,11 @@ class scctcust extends Model
     {
         $raw = preg_replace('/\D/', '', (string) config('app.nova', '777726'));
 
-        return $raw !== '' ? $raw : '777726';
+        if ($raw === '' || $raw === '77726' || strlen($raw) < 6) {
+            return '777726';
+        }
+
+        return $raw;
     }
 
     public static function vaTotalLength(): int

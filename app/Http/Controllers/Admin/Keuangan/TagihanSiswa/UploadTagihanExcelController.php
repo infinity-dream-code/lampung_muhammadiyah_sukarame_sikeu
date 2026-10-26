@@ -295,6 +295,13 @@ class UploadTagihanExcelController extends Controller
                     continue;
                 }
 
+                $this->normalizeNewBillFlags(
+                    (int) $siswa->CUSTID,
+                    $nmTagihan,
+                    $bta,
+                    (int) $isNyicil === 1 ? 1 : 0
+                );
+
                 $this->ensureBillDetailForSiswa(
                     (int) $siswa->CUSTID,
                     $nmTagihan,
@@ -405,7 +412,8 @@ class UploadTagihanExcelController extends Controller
             'FUrutan' => $newUrut,
             'FTGLTagihan' => Carbon::now(),
             'BTA' => $billac,
-            'INSTALLMENT' => ((int) $isNyicil === 1) ? 1 : 0,
+            'INSTALLMENT' => 0,
+            'FLPART' => null,
             'isINSTALLABLE' => ((int) $isNyicil === 1) ? 1 : 0,
         ]);
 
@@ -418,6 +426,20 @@ class UploadTagihanExcelController extends Controller
             'billac' => $billac,
             'nominal' => $nominal,
         ]);
+    }
+
+    private function normalizeNewBillFlags(int $custId, string $billNm, string $billac, int $isInstallable): void
+    {
+        scctbill::query()
+            ->where('CUSTID', $custId)
+            ->where('BILLNM', $billNm)
+            ->where('BILLAC', $billac)
+            ->where('FSTSBolehBayar', 1)
+            ->update([
+                'INSTALLMENT' => 0,
+                'FLPART' => null,
+                'isINSTALLABLE' => $isInstallable,
+            ]);
     }
 
     private function ensureBillDetailForSiswa(int $custId, string $billNm, string $billac, int $nominal, string $kodePost): void

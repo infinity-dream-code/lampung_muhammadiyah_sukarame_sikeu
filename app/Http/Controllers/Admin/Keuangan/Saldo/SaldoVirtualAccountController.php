@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Facades\Excel;
 use Mockery\Exception;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -32,6 +33,59 @@ class SaldoVirtualAccountController extends Controller
 
     /** Pembayaran manual cash — tidak masuk saldo/jurnal VA. */
     private const FIDBANK_MANUAL_CASH = '1140000';
+
+    /**
+     * @return array{query: \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder, join: string}
+     */
+    private function saldoVaSource(): array
+    {
+        try {
+            if (Schema::connection('DATA_MYSQL')->hasTable('v_saldo_va')) {
+                $cols = Schema::connection('DATA_MYSQL')->getColumnListing('v_saldo_va');
+                $saldoCol = in_array('SALDO', $cols, true) ? 'SALDO' : (in_array('saldo', $cols, true) ? 'saldo' : null);
+                $hasCustId = in_array('CUSTID', $cols, true);
+                $hasNocust = in_array('NOCUST', $cols, true);
+
+                if ($saldoCol && ($hasCustId || $hasNocust)) {
+                    $select = [DB::raw('CAST(COALESCE(' . $saldoCol . ', 0) AS SIGNED) as saldo')];
+                    if ($hasCustId) {
+                        $select[] = 'CUSTID';
+                    }
+                    if ($hasNocust) {
+                        $select[] = 'NOCUST';
+                    }
+
+                    return [
+                        'query' => DB::connection('DATA_MYSQL')->table('v_saldo_va')->select($select),
+                        'join' => $hasCustId ? 'CUSTID' : 'NOCUST',
+                    ];
+                }
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        $query = sccttran::query()
+            ->select([
+                'CUSTID',
+                DB::raw('CAST(COALESCE(SUM(KREDIT), 0) - COALESCE(SUM(DEBET), 0) AS SIGNED) as saldo'),
+            ])
+            ->groupBy('CUSTID');
+
+        try {
+            if (Schema::connection('DATA_MYSQL')->hasColumn('sccttran', 'isreversal')) {
+                $query->where(function ($q) {
+                    $q->whereNull('isreversal')
+                        ->orWhere('isreversal', 0)
+                        ->orWhere('isreversal', '0');
+                });
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        return ['query' => $query, 'join' => 'CUSTID'];
+    }
 
     /** Tampilkan semua transaksi sccttran kecuali manual cash (1140000). */
     private function excludeManualCashScope($query, string $fidBankColumn = 'FIDBANK')
@@ -150,12 +204,9 @@ class SaldoVirtualAccountController extends Controller
                 }
                 $data['siswa']->NOVA = $NOVA;
 
-                $data['totalKredit'] = (int) $this->excludeManualCashScope(sccttran::query())
-                    ->where('CUSTID', $id)
-                    ->sum('KREDIT');
-                $data['totalDebet'] = (int) $this->excludeManualCashScope(sccttran::query())
-                    ->where('CUSTID', $id)
-                    ->sum('DEBET');
+                $saldoVa = $this->resolveCustSaldo($id);
+                $data['totalKredit'] = $saldoVa > 0 ? $saldoVa : 0;
+                $data['totalDebet'] = $saldoVa < 0 ? abs($saldoVa) : 0;
 //                $data['siswa']-> = $NOVA;
             } else {
                 throw new Exception('Siswa tidak ditemukan');
@@ -392,17 +443,15 @@ class SaldoVirtualAccountController extends Controller
             'scctcust.DESC04',
         ]));
 
-        $saldoAgg = $this->excludeManualCashScope(sccttran::query())
-            ->select([
-                'CUSTID',
-                DB::raw('COALESCE(SUM(KREDIT), 0) AS kredit'),
-                DB::raw('COALESCE(SUM(DEBET), 0) AS debet'),
-            ])
-            ->groupBy('CUSTID');
+        $saldoSrc = $this->saldoVaSource();
 
         $query = scctcust::query()
-            ->leftJoinSub($saldoAgg, 'trx', function ($join) {
-                $join->on('trx.CUSTID', '=', 'scctcust.CUSTID');
+            ->leftJoinSub($saldoSrc['query'], 'trx', function ($join) use ($saldoSrc) {
+                if ($saldoSrc['join'] === 'NOCUST') {
+                    $join->on('trx.NOCUST', '=', 'scctcust.NOCUST');
+                } else {
+                    $join->on('trx.CUSTID', '=', 'scctcust.CUSTID');
+                }
             });
 
         if ($filterQuery) {
@@ -438,9 +487,9 @@ class SaldoVirtualAccountController extends Controller
         $records = (clone $query)
             ->select($select)
             ->addSelect([
-                DB::raw('COALESCE(trx.kredit, 0) AS kredit'),
-                DB::raw('COALESCE(trx.debet, 0) AS debet'),
-                DB::raw('(COALESCE(trx.kredit, 0) - COALESCE(trx.debet, 0)) AS saldo'),
+                DB::raw('CASE WHEN COALESCE(trx.saldo, 0) > 0 THEN COALESCE(trx.saldo, 0) ELSE 0 END AS kredit'),
+                DB::raw('CASE WHEN COALESCE(trx.saldo, 0) < 0 THEN ABS(COALESCE(trx.saldo, 0)) ELSE 0 END AS debet'),
+                DB::raw('COALESCE(trx.saldo, 0) AS saldo'),
             ])
             ->orderBy($columnName, $columnSortOrder)
             ->skip($start)
@@ -637,10 +686,20 @@ class SaldoVirtualAccountController extends Controller
             return 0;
         }
 
-        return (int) sccttran::query()
-            ->where('CUSTID', $custId)
-            ->selectRaw('COALESCE(SUM(KREDIT), 0) - COALESCE(SUM(DEBET), 0) AS saldo')
-            ->value('saldo');
+        $src = $this->saldoVaSource();
+        $query = (clone $src['query']);
+
+        if ($src['join'] === 'NOCUST') {
+            $nocust = scctcust::query()->where('CUSTID', $custId)->value('NOCUST');
+            if (blank($nocust)) {
+                return 0;
+            }
+            $query->where('NOCUST', $nocust);
+        } else {
+            $query->where('CUSTID', $custId);
+        }
+
+        return (int) $query->value('saldo');
     }
 
     public function getSaldo(Request $request)

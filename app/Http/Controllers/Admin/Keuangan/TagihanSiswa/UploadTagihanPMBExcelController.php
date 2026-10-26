@@ -221,6 +221,7 @@ class UploadTagihanPMBExcelController extends Controller
                     'BTA' => $bta,
                     'BILLCD' => $billCd,
                     'INSTALLMENT' => 0,
+                    'FLPART' => null,
                     'isINSTALLABLE' => (int) ($tagihan->isINSTALLMENT ?? 0),
                 ]);
 

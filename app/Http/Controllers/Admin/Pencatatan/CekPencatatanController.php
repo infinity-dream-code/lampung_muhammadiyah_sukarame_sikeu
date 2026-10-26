@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\akun_kas_keluar;
 use App\Models\akun_kas_masuk;
 use App\Models\akt_jurnal;
+use App\Support\PencatatanAkunTable;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
 use Illuminate\Http\Request;
@@ -28,6 +29,10 @@ class CekPencatatanController extends Controller
         $akunKeluar = collect();
 
         try {
+            PencatatanJurnalTable::ensureLedgerColumns();
+            PencatatanAkunTable::ensureMasuk();
+            PencatatanAkunTable::ensureKeluar();
+
             if (Schema::connection('DATA_MYSQL')->hasTable(PencatatanJurnalTable::name())) {
                 $periodes = PencatatanPeriode::options();
             }

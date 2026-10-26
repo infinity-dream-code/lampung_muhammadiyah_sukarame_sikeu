@@ -161,13 +161,17 @@ class CopyTagihanController extends Controller
                     $newBillCd = "{$billYear}/{$billMonth}-{$newUrut}-{$suffix}";
                 }
 
+                $masterCopy = mst_tagihan::query()->where('tagihan', $tagihanBaruNm)->first();
+
                 $newBill = scctbill::create([
                     'CUSTID' => $oldBill->CUSTID,
                     'BILLCD' => $newBillCd,
                     'BILLAC' => $newBillac,
                     'BILLNM' => $tagihanBaruNm,
                     'BILLAM' => $oldBill->BILLAM,
-                    'FLPART' => $oldBill->FLPART,
+                    'BILLPAID' => 0,
+                    'PAYMENTLEFT' => $oldBill->BILLAM,
+                    'FLPART' => null,
                     'PAIDST' => 0,
                     'PAIDDT' => null,
                     'NOREFF' => null,
@@ -176,6 +180,8 @@ class CopyTagihanController extends Controller
                     'FTGLTagihan' => now(),
                     'FIDBANK' => null,
                     'BTA' => $request->thn_aka,
+                    'INSTALLMENT' => 0,
+                    'isINSTALLABLE' => (int) ($masterCopy?->isINSTALLMENT ?? 0),
                 ]);
 
                 $details = scctbill_detail::where('CUSTID', $oldBill->CUSTID)

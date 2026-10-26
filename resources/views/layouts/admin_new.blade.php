@@ -506,6 +506,10 @@
     </script>
 @endif
 <script src="{{ asset('js/formatTanggalIndonesia.js') }}?v=20260924-id2"></script>
+<script>
+    window.APP_VA_PREFIX = @json(\App\Models\scctcust::vaPrefix());
+</script>
+<script src="{{ asset('js/va-format.js') }}?v=20261026-bcn2"></script>
 @yield('script')
 <script src="{{ asset('js/session-keepalive.js') }}?v=20261026-sess1"></script>
 </body>

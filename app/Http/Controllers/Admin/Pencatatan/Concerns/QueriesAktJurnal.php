@@ -2,23 +2,18 @@
 
 namespace App\Http\Controllers\Admin\Pencatatan\Concerns;
 
-use App\Models\akun_kas_keluar;
-use App\Models\akun_kas_masuk;
 use App\Models\akt_jurnal;
+use App\Support\PencatatanAkunLookup;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
 use Illuminate\Database\Eloquent\Builder;
 
 trait QueriesAktJurnal
 {
-    /** @var array<string, string>|null */
-    private static ?array $akunMasukMap = null;
-
-    /** @var array<string, string>|null */
-    private static ?array $akunKeluarMap = null;
-
     protected function jurnalBaseQuery(): Builder
     {
+        PencatatanJurnalTable::ensureLedgerColumns();
+
         $select = [
             'urut',
             'tanggal',
@@ -41,6 +36,9 @@ trait QueriesAktJurnal
         }
         if (PencatatanJurnalTable::hasNoRefColumn()) {
             $select[] = 'no_ref';
+        }
+        if (PencatatanJurnalTable::hasKodePerkiraanColumn()) {
+            $select[] = 'kode_perkiraan';
         }
 
         return akt_jurnal::query()->select($select);
@@ -114,29 +112,11 @@ trait QueriesAktJurnal
         }
 
         if ($filterAkunMasuk !== '' && strtolower($filterAkunMasuk) !== 'all') {
-            if (PencatatanJurnalTable::hasAkunMasukColumn()) {
-                $query->where('NamaAkunMasuk', $filterAkunMasuk);
-            } else {
-                $kode = $this->kodeAkunMasukByNama($filterAkunMasuk);
-                if ($kode !== null) {
-                    $query->where('no_bukti', $kode)->where('kredit', '>', 0);
-                } else {
-                    $query->whereRaw('1 = 0');
-                }
-            }
+            $this->applyAkunFilter($query, 'masuk', $filterAkunMasuk);
         }
 
         if ($filterAkunKeluar !== '' && strtolower($filterAkunKeluar) !== 'all') {
-            if (PencatatanJurnalTable::hasAkunKeluarColumn()) {
-                $query->where('NamaAkunKeluar', $filterAkunKeluar);
-            } else {
-                $kode = $this->kodeAkunKeluarByNama($filterAkunKeluar);
-                if ($kode !== null) {
-                    $query->where('no_bukti', $kode)->where('debet', '>', 0);
-                } else {
-                    $query->whereRaw('1 = 0');
-                }
-            }
+            $this->applyAkunFilter($query, 'keluar', $filterAkunKeluar);
         }
 
         if ($filterSumber !== '' && strtolower($filterSumber) !== 'all' && PencatatanJurnalTable::hasNoRefColumn()) {
@@ -167,16 +147,10 @@ trait QueriesAktJurnal
             $bukti = url($bukti);
         }
 
-        $namaMasuk = $item->NamaAkunMasuk ?? null;
-        $namaKeluar = $item->NamaAkunKeluar ?? null;
         $noBukti = trim((string) ($item->no_bukti ?? ''));
-
-        if (!PencatatanJurnalTable::hasAkunMasukColumn() && (int) ($item->kredit ?? 0) > 0 && $noBukti !== '') {
-            $namaMasuk = $this->akunMasukMap()[$noBukti] ?? $namaMasuk;
-        }
-        if (!PencatatanJurnalTable::hasAkunKeluarColumn() && (int) ($item->debet ?? 0) > 0 && $noBukti !== '') {
-            $namaKeluar = $this->akunKeluarMap()[$noBukti] ?? $namaKeluar;
-        }
+        $kode = trim((string) ($item->kode_perkiraan ?? ''));
+        $namaMasuk = PencatatanAkunLookup::namaMasuk($item->NamaAkunMasuk ?? null, $kode, $noBukti);
+        $namaKeluar = PencatatanAkunLookup::namaKeluar($item->NamaAkunKeluar ?? null, $kode, $noBukti);
 
         $row = [
             'item_id' => $item->urut,
@@ -192,8 +166,8 @@ trait QueriesAktJurnal
             'periode_raw' => $item->periode ?? '',
             'tahun' => $item->tahun ?? '',
             'sumber_kas' => trim((string) ($item->no_ref ?? '')) ?: '-',
-            'akun_kas_keluar' => $namaKeluar ?: '-',
-            'akun_kas_masuk' => $namaMasuk ?: '-',
+            'akun_kas_keluar' => $namaKeluar,
+            'akun_kas_masuk' => $namaMasuk,
         ];
 
         if ($saldo !== null) {
@@ -203,50 +177,61 @@ trait QueriesAktJurnal
         return $row;
     }
 
-    /** @return array<string, string> */
-    private function akunMasukMap(): array
+    protected function applyAkunFilter(Builder $query, string $jenis, string $filter): void
     {
-        if (self::$akunMasukMap === null) {
-            self::$akunMasukMap = akun_kas_masuk::query()
-                ->pluck('NamaAkunMasuk', 'KodeAkunMasuk')
-                ->all();
-        }
+        $match = $jenis === 'keluar'
+            ? PencatatanAkunLookup::matchKeluar($filter)
+            : PencatatanAkunLookup::matchMasuk($filter);
 
-        return self::$akunMasukMap;
-    }
+        $namaCol = $jenis === 'keluar' ? 'NamaAkunKeluar' : 'NamaAkunMasuk';
+        $hasNama = $jenis === 'keluar'
+            ? PencatatanJurnalTable::hasAkunKeluarColumn()
+            : PencatatanJurnalTable::hasAkunMasukColumn();
 
-    /** @return array<string, string> */
-    private function akunKeluarMap(): array
-    {
-        if (self::$akunKeluarMap === null) {
-            self::$akunKeluarMap = akun_kas_keluar::query()
-                ->pluck('NamaAkunKeluar', 'KodeAkunKeluar')
-                ->all();
-        }
+        $query->where(function ($q) use ($match, $namaCol, $hasNama) {
+            $hasCondition = false;
 
-        return self::$akunKeluarMap;
-    }
-
-    private function kodeAkunMasukByNama(string $nama): ?string
-    {
-        foreach ($this->akunMasukMap() as $kode => $label) {
-            if ($label === $nama) {
-                return (string) $kode;
+            if ($hasNama && $match['nama']) {
+                $q->orWhere($namaCol, $match['nama']);
+                $hasCondition = true;
             }
-        }
 
-        return null;
+            if ($match['kode']) {
+                if (PencatatanJurnalTable::hasKodePerkiraanColumn()) {
+                    $q->orWhere('kode_perkiraan', $match['kode']);
+                    $hasCondition = true;
+                }
+                $q->orWhere('no_bukti', $match['kode']);
+                $hasCondition = true;
+            }
+
+            if (!$hasCondition) {
+                $q->whereRaw('1 = 0');
+            }
+        });
+
+        if ($jenis === 'keluar') {
+            $query->where('debet', '>', 0);
+        } else {
+            $query->where('kredit', '>', 0);
+        }
     }
 
-    private function kodeAkunKeluarByNama(string $nama): ?string
+    protected function runningSaldoBefore(Builder $filteredQuery, string $columnName, string $columnSortOrder, int $start): int
     {
-        foreach ($this->akunKeluarMap() as $kode => $label) {
-            if ($label === $nama) {
-                return (string) $kode;
-            }
+        if ($start <= 0) {
+            return 0;
         }
 
-        return null;
+        $prior = (clone $filteredQuery)
+            ->reorder()
+            ->orderBy($columnName, $columnSortOrder)
+            ->orderBy('urut', 'asc')
+            ->skip(0)
+            ->take($start)
+            ->get(['debet', 'kredit']);
+
+        return (int) $prior->sum('kredit') - (int) $prior->sum('debet');
     }
 
     protected function jurnalSortMap(): array
@@ -259,8 +244,11 @@ trait QueriesAktJurnal
             'keterangan' => 'keterangan',
             'periode' => 'periode',
             'tahun' => 'tahun',
-            'sumber_kas' => 'no_ref',
         ];
+
+        if (PencatatanJurnalTable::hasNoRefColumn()) {
+            $map['sumber_kas'] = 'no_ref';
+        }
 
         if (PencatatanJurnalTable::hasAkunKeluarColumn()) {
             $map['akun_kas_keluar'] = 'NamaAkunKeluar';

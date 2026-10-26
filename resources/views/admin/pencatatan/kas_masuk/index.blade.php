@@ -10,7 +10,7 @@
         <li class="breadcrumb-item">{{ $title ?? 'Pencatatan Sederhana' }}</li>
         <li class="breadcrumb-item active">{{ $mainTitle ?? 'Kas Masuk' }}</li>
     </ul>
-    <div class="alert alert-info py-2">Kas masuk: uang masuk ke kas. Kelompok penerimaan mengikuti master tagihan. Centang <strong>Saldo Awal</strong> untuk input saldo pembuka periode.</div>
+    <div class="alert alert-info py-2">Kas masuk: uang masuk ke kas. Pilih <strong>Akun Kas Masuk</strong>. Centang <strong>Saldo Awal</strong> untuk input saldo pembuka periode.</div>
     <div class="card">
         <div class="card-header header-elements">
             <h5 class="mb-0 me-2">{{ $dataTitle ?? 'Kas Masuk' }}</h5>
@@ -58,14 +58,13 @@
                             </div>
                         </div>
                         <div class="mb-3" id="wrap-kelompok">
-                            <label class="form-label required">Kelompok Penerimaan</label>
+                            <label class="form-label required">Akun Kas Masuk</label>
                             <select class="form-select" name="kode_akun" id="kode_akun" required>
-                                <option value="">Pilih kelompok / akun</option>
+                                <option value="">Pilih akun kas masuk</option>
                                 @foreach($akunMasuk as $a)
                                     <option value="{{ $a->KodeAkunMasuk }}">{{ $a->KodeAkunMasuk }} - {{ $a->NamaAkunMasuk }}</option>
                                 @endforeach
                             </select>
-                            <div class="form-text">Diambil dari master tagihan (SPP, dll) plus akun kas masuk.</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label required">Sumber Kas</label>

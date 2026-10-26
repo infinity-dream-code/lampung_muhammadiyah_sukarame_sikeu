@@ -8,6 +8,8 @@ use App\Models\akun_kas_masuk;
 use App\Models\akt_jurnal;
 use App\Models\mst_tagihan;
 use App\Models\ValidationMessage;
+use App\Support\PencatatanAkunLookup;
+use App\Support\PencatatanAkunTable;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
 use Illuminate\Http\Request;
@@ -28,7 +30,8 @@ class KasMasukController extends Controller
     {
         $akunMasuk = collect();
         try {
-            $this->ensureKelompokPenerimaan();
+            PencatatanJurnalTable::ensureLedgerColumns();
+            $this->ensureAkunKasMasuk();
             if (Schema::connection('DATA_MYSQL')->hasTable('akun_kas_masuk')) {
                 $akunMasuk = akun_kas_masuk::query()
                     ->orderBy('KodeAkunMasuk')
@@ -65,7 +68,7 @@ class KasMasukController extends Controller
                 'className' => 'text-end',
             ],
             ['data' => 'keterangan', 'name' => 'Keterangan', 'searchable' => true, 'orderable' => true],
-            ['data' => 'NamaAkunMasuk', 'name' => 'Kelompok Penerimaan', 'searchable' => true, 'orderable' => true],
+            ['data' => 'NamaAkunMasuk', 'name' => 'Akun Kas Masuk', 'searchable' => true, 'orderable' => true],
             ['data' => 'sumber_kas', 'name' => 'Sumber Kas', 'searchable' => true, 'orderable' => true],
             ['data' => 'periode', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
         ];
@@ -74,6 +77,7 @@ class KasMasukController extends Controller
     public function getData(Request $request)
     {
         try {
+            PencatatanJurnalTable::ensureLedgerColumns();
             $draw = (int) $request->get('draw', 0);
             $start = (int) $request->get('start', 0);
             $rowperpage = (int) $request->get('length', 10);
@@ -92,6 +96,7 @@ class KasMasukController extends Controller
                     $columnName = match ($requested) {
                         'kredit' => 'kredit',
                         'sumber_kas' => PencatatanJurnalTable::hasNoRefColumn() ? 'no_ref' : 'keterangan',
+                        'NamaAkunMasuk' => PencatatanJurnalTable::hasAkunMasukColumn() ? 'NamaAkunMasuk' : 'tanggal',
                         default => $requested,
                     };
                 }
@@ -126,6 +131,9 @@ class KasMasukController extends Controller
             if (PencatatanJurnalTable::hasNoRefColumn()) {
                 $select[] = 'no_ref';
             }
+            if (PencatatanJurnalTable::hasKodePerkiraanColumn()) {
+                $select[] = 'kode_perkiraan';
+            }
 
             $records = $filteredQuery
                 ->orderBy($columnName, in_array($columnSortOrder, ['asc', 'desc'], true) ? $columnSortOrder : 'desc')
@@ -135,7 +143,11 @@ class KasMasukController extends Controller
                 ->get($select)
                 ->map(function ($item) {
                     $row = $item->toArray();
-                    $row['NamaAkunMasuk'] = $row['NamaAkunMasuk'] ?? '-';
+                    $row['NamaAkunMasuk'] = PencatatanAkunLookup::namaMasuk(
+                        $row['NamaAkunMasuk'] ?? null,
+                        $row['kode_perkiraan'] ?? null,
+                        $row['no_bukti'] ?? null
+                    );
                     $row['kredit'] = (int) ($row['kredit'] ?? 0);
                     $row['sumber_kas'] = trim((string) ($row['no_ref'] ?? '')) ?: '-';
                     $row['periode'] = PencatatanPeriode::label($row['periode'] ?? '', $row['tahun'] ?? '');
@@ -170,7 +182,7 @@ class KasMasukController extends Controller
         $isSaldoAwal = $request->boolean('saldo_awal');
 
         if ($isSaldoAwal) {
-            $this->ensureKelompokPenerimaan();
+            $this->ensureAkunKasMasuk();
             $kodeAkun = 'SA';
             if ($keterangan === '') {
                 $keterangan = 'Saldo awal ' . ($this->periodeFromDate($tanggal)['label'] ?? '');
@@ -204,7 +216,7 @@ class KasMasukController extends Controller
 
         $akun = akun_kas_masuk::query()->where('KodeAkunMasuk', $kodeAkun)->first();
         if (!$akun) {
-            return response()->json(['message' => 'Kelompok penerimaan / akun kas masuk tidak ditemukan'], 422);
+            return response()->json(['message' => 'Akun kas masuk tidak ditemukan'], 422);
         }
 
         $period = $this->periodeFromDate($tanggal);
@@ -222,6 +234,7 @@ class KasMasukController extends Controller
                 'periode' => $period['periode'],
                 'buktiurl' => $buktiurl,
                 'no_ref' => $sumberKas,
+                'kode_perkiraan' => $kodeAkun,
                 'NamaAkunMasuk' => $akun->NamaAkunMasuk,
                 'NamaAkunKeluar' => null,
             ]);
@@ -235,8 +248,10 @@ class KasMasukController extends Controller
         }
     }
 
-    private function ensureKelompokPenerimaan(): void
+    private function ensureAkunKasMasuk(): void
     {
+        PencatatanAkunTable::ensureMasuk();
+
         if (!Schema::connection('DATA_MYSQL')->hasTable('akun_kas_masuk')) {
             return;
         }

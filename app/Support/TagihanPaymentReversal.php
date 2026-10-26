@@ -165,52 +165,80 @@ class TagihanPaymentReversal
 
     private function cancelCashPayment(scctbill $tagihan, string $username): void
     {
-        $billAm = (int) ($tagihan->BILLAM ?? 0);
-        $nominalBayar = $this->resolvePaidAmount($tagihan);
+        $last = $this->latestActivePayment($tagihan);
+        $nominalBayar = $last
+            ? max((int) ($last->DEBET ?? 0), (int) ($last->KREDIT ?? 0))
+            : $this->resolvePaidAmount($tagihan);
 
-        $this->clearTellerPaymentKredit($tagihan);
-
-        if ($nominalBayar > 0) {
-            $this->insertReversalTransaction($tagihan, $nominalBayar, 'REVERSAL', $username);
+        if ($last) {
+            $this->markTransactionReversed($last);
         }
 
-        $tagihan->update([
-            'PAIDST' => 0,
-            'PAIDDT' => null,
-            'PAIDDT_ACTUAL' => null,
-            'BILLPAID' => 0,
-            'PAYMENTLEFT' => $billAm,
-            'INSTALLMENT' => 0,
+        $this->applyBillAfterReverse($tagihan, $nominalBayar);
+    }
+
+    private function latestActivePayment(scctbill $tagihan): ?sccttran
+    {
+        return $this->paymentTransactionQuery($tagihan)
+            ->orderByDesc('INSTALLMENT')
+            ->orderByDesc('urut')
+            ->first();
+    }
+
+    private function markTransactionReversed(sccttran $tran): void
+    {
+        try {
+            $tran->update(['isreversal' => 1]);
+
+            return;
+        } catch (\Throwable $e) {
+            if (stripos($e->getMessage(), 'isreversal') === false
+                && stripos($e->getMessage(), 'Unknown column') === false) {
+                throw $e;
+            }
+        }
+
+        // Jangan kosongkan KREDIT saja — v_saldo_va = KREDIT - DEBET.
+        // Tetap seimbangkan baris cash, lalu tandai REVERSAL.
+        $debet = (int) ($tran->DEBET ?? 0);
+        $kredit = (int) ($tran->KREDIT ?? 0);
+        $tran->update([
+            'METODE' => 'REVERSAL',
+            'NOREFF' => 'REVERSAL',
+            'DEBET' => $debet,
+            'KREDIT' => max($kredit, $debet),
         ]);
     }
 
-    private function clearTellerPaymentKredit(scctbill $tagihan): void
+    private function applyBillAfterReverse(scctbill $tagihan, int $nominalBayar): void
     {
-        sccttran::query()
-            ->where('BILLID', $tagihan->AA)
-            ->where('CUSTID', $tagihan->CUSTID)
-            ->whereRaw('UPPER(TRIM(COALESCE(METODE, ""))) = ?', ['FROM TELLER'])
-            ->where('KREDIT', '>', 0)
-            ->update(['KREDIT' => 0]);
+        $billAm = (int) ($tagihan->BILLAM ?? 0);
+        $remainingPaid = max(0, (int) ($tagihan->BILLPAID ?? 0) - max(0, $nominalBayar));
+        $remainingCicilan = $this->paymentTransactionQuery($tagihan)->count();
+
+        $tagihan->update([
+            'PAIDST' => ($remainingPaid > 0 && $remainingPaid >= $billAm) ? 1 : 0,
+            'PAIDDT' => $remainingPaid > 0 ? $tagihan->PAIDDT : null,
+            'PAIDDT_ACTUAL' => $remainingPaid > 0 ? $tagihan->PAIDDT_ACTUAL : null,
+            'BILLPAID' => $remainingPaid,
+            'PAYMENTLEFT' => max(0, $billAm - $remainingPaid),
+            'INSTALLMENT' => $remainingCicilan,
+            'FIDBANK' => $remainingPaid > 0 ? $tagihan->FIDBANK : null,
+        ]);
     }
 
     private function reverseSaldoPaymentManually(scctbill $tagihan, string $username): void
     {
-        $billAm = (int) ($tagihan->BILLAM ?? 0);
-        $nominalBayar = $this->resolvePaidAmount($tagihan);
+        $last = $this->latestActivePayment($tagihan);
+        $nominalBayar = $last
+            ? max((int) ($last->DEBET ?? 0), (int) ($last->KREDIT ?? 0))
+            : $this->resolvePaidAmount($tagihan);
 
-        if ($nominalBayar > 0) {
-            $this->insertReversalTransaction($tagihan, $nominalBayar, 'JURNAL SALDO', $username);
+        if ($last) {
+            $this->markTransactionReversed($last);
         }
 
-        $tagihan->update([
-            'PAIDST' => 0,
-            'PAIDDT' => null,
-            'PAIDDT_ACTUAL' => null,
-            'BILLPAID' => 0,
-            'PAYMENTLEFT' => $billAm,
-            'INSTALLMENT' => 0,
-        ]);
+        $this->applyBillAfterReverse($tagihan, $nominalBayar);
     }
 
     private function insertReversalTransaction(scctbill $tagihan, int $nominalBayar, string $metode, string $username): void

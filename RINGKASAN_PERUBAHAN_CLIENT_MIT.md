@@ -6,7 +6,7 @@ Dokumen ini agar bisa dilanjutkan manual kalau AI kena limit.
 **Client:** MIT Muhammadiyah Sukarame  
 **Lokasi:** Kota Bandar Lampung, Prov. Lampung  
 **Icon:** `public/mit.png`  
-**Prefix VA (Open Payment):** `77726` (dari `777 26`)
+**Prefix VA (Open Payment):** `777726`
 
 ---
 
@@ -14,18 +14,18 @@ Dokumen ini agar bisa dilanjutkan manual kalau AI kena limit.
 
 | File | Apa yang diubah |
 |------|-----------------|
-| `.env` | `APP_NAME`, `APP_NAMA_INSTANSI` → `MIT Muhammadiyah Sukarame`; `APP_ALAMAT` → `Kota Bandar Lampung, Prov. Lampung`; `APP_DOMISILI` → `Kota Bandar Lampung`; `APP_LOGO` → `mit.png`; `APP_NOVA` → `77726`; `SESSION_COOKIE` → `sikeu_mit_sukarame_session` |
+| `.env` | `APP_NAME`, `APP_NAMA_INSTANSI` → `MIT Muhammadiyah Sukarame`; `APP_ALAMAT` → `Kota Bandar Lampung, Prov. Lampung`; `APP_DOMISILI` → `Kota Bandar Lampung`; `APP_LOGO` → `mit.png`; `APP_NOVA` → `777726`; `SESSION_COOKIE` → `sikeu_mit_sukarame_session` |
 | `.env.example` | Sama seperti `.env` (template) |
 | `config/app.php` | Default name/instansi/alamat/domisili/logo/nova; tambah `logo_mime` (otomatis dari ekstensi logo) |
 | `config/session.php` | Default cookie session → `sikeu_mit_sukarame_session` |
-| `app/Models/scctcust.php` | Fallback prefix VA → `77726` |
+| `app/Models/scctcust.php` | Fallback prefix VA → `777726` |
 | `app/Support/PersistentLogin.php` | Nama cookie persistent → `mit_muhammadiyah_sukarame` (bukan `assyafiyah-sidoarjo`) |
 | `resources/views/layouts/admin_new.blade.php` | Favicon `type="image/png"` |
 | `resources/views/layouts/login_new.blade.php` | Favicon `type="image/png"` |
 | `resources/views/layouts/login_layout.blade.php` | Favicon `type="image/png"` |
 | `resources/views/layouts/export/kop_file.blade.php` | MIME logo dinamis (png/jpg/…) |
 | `routes/web.php` | `get-logo` pakai `config('app.logo_mime')` |
-| Blade VA fallback (`751095` → `77726`) | `data_penerimaan.blade.php`, `data_tagihan.blade.php`, `manual_pembayaran.blade.php`, `manual_pembayaran_nis.blade.php`, `manual_pembayaran_no_daftar.blade.php` |
+| Blade VA fallback (`751095` → `777726`) | `data_penerimaan.blade.php`, `data_tagihan.blade.php`, `manual_pembayaran.blade.php`, `manual_pembayaran_nis.blade.php`, `manual_pembayaran_no_daftar.blade.php` |
 | Blade logo data-URI | Beberapa export/cetak JS diganti pakai `config("app.logo_mime")` agar PNG tidak dipaksa JPEG |
 
 **Catatan:** File logo harus ada di `public/mit.png` (sudah ada). Setelah ubah `.env`, jalankan:
@@ -88,7 +88,7 @@ Aturan yang **tidak boleh diubah balik**:
 ## D. Checklist verifikasi cepat
 
 - [ ] Login → nama/logo MIT muncul di title & favicon
-- [ ] VA siswa = `77726` + nomor (panjang total 16)
+- [ ] VA siswa = `777726` + nomor (panjang total 16)
 - [ ] Kop surat / cetak alamat = Kota Bandar Lampung, Prov. Lampung
 - [ ] Buka admin lama, biarkan idle, navigasi menu → **tidak** kena logout / alert sesi
 - [ ] Simulasi 419 (token usang) → request retry / reload, **tetap di halaman**, tidak ke `/login`

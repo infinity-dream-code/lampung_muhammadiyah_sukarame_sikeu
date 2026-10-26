@@ -2,18 +2,21 @@
 
 namespace App\Http\Controllers\Admin\Pencatatan;
 
+use App\Exports\RekapPencatatanExcelExport;
 use App\Http\Controllers\Admin\Pencatatan\Concerns\QueriesAktJurnal;
 use App\Http\Controllers\Controller;
 use App\Models\akun_kas_keluar;
 use App\Models\akun_kas_masuk;
-use App\Models\akt_jurnal;
+use App\Support\PencatatanAkunTable;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
-use App\Support\SmartcardExcelExport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 
 class RekapExportExcelController extends Controller
 {
@@ -30,6 +33,10 @@ class RekapExportExcelController extends Controller
         $akunKeluar = collect();
 
         try {
+            PencatatanJurnalTable::ensureLedgerColumns();
+            PencatatanAkunTable::ensureMasuk();
+            PencatatanAkunTable::ensureKeluar();
+
             if (Schema::connection('DATA_MYSQL')->hasTable(PencatatanJurnalTable::name())) {
                 $periodes = PencatatanPeriode::options();
             }
@@ -121,6 +128,7 @@ class RekapExportExcelController extends Controller
             $this->applyJurnalFilters($filteredQuery, $filters, $searchValue);
             $totalRecordswithFilter = (clone $filteredQuery)->count();
             $saldo = $this->calculateJurnalSaldo($filters, $searchValue);
+            $running = $this->runningSaldoBefore($filteredQuery, $columnName, $columnSortOrder, $start);
 
             $records = $filteredQuery
                 ->orderBy($columnName, $columnSortOrder)
@@ -128,7 +136,12 @@ class RekapExportExcelController extends Controller
                 ->skip($start)
                 ->take($rowperpage)
                 ->get()
-                ->map(fn ($item) => $this->mapJurnalRow($item, $saldo))
+                ->map(function ($item) use (&$running) {
+                    $row = $this->mapJurnalRow($item);
+                    $running += $row['nominal_masuk'] - $row['nominal_keluar'];
+                    $row['saldo'] = $running;
+                    return $row;
+                })
                 ->toArray();
 
             return response()->json([
@@ -156,62 +169,78 @@ class RekapExportExcelController extends Controller
         }
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request): BinaryFileResponse|RedirectResponse
     {
-        [$filters, $searchValue] = $this->extractFilters($request);
-        [$columnName, $columnSortOrder] = $this->resolveSort($request);
+        try {
+            PencatatanJurnalTable::ensureLedgerColumns();
 
-        $query = $this->jurnalBaseQuery();
-        $this->applyJurnalFilters($query, $filters, $searchValue);
-        $saldo = $this->calculateJurnalSaldo($filters, $searchValue);
+            [$filters, $searchValue] = $this->extractFilters($request);
+            [$columnName, $columnSortOrder] = $this->resolveSort($request);
 
-        $rows = $query
-            ->orderBy($columnName, $columnSortOrder)
-            ->orderBy('urut', 'asc')
-            ->get()
-            ->map(function ($item) use ($saldo) {
-                $mapped = $this->mapJurnalRow($item, $saldo);
-                return [
-                    SmartcardExcelExport::datetimeCell($mapped['tanggal']),
-                    $mapped['no_bukti'],
-                    $mapped['nominal_keluar'],
-                    $mapped['nominal_masuk'],
-                    $mapped['foto'],
-                    $mapped['periode'],
-                    $mapped['tahun'],
-                    $mapped['keterangan'],
-                    $mapped['sumber_kas'] ?? '-',
-                    $mapped['saldo'],
-                    $mapped['akun_kas_keluar'],
-                    $mapped['akun_kas_masuk'],
-                ];
-            })
-            ->all();
+            $query = $this->jurnalBaseQuery();
+            $this->applyJurnalFilters($query, $filters, $searchValue);
 
-        $rows[] = ['', '', '', '', '', '', '', '', 'SALDO', $saldo, '', ''];
+            $running = 0;
+            $rows = $query
+                ->orderBy($columnName, $columnSortOrder)
+                ->orderBy('urut', 'asc')
+                ->get()
+                ->map(function ($item) use (&$running) {
+                    $mapped = $this->mapJurnalRow($item);
+                    $running += $mapped['nominal_masuk'] - $mapped['nominal_keluar'];
 
-        $periode = $filters['periode'] !== '' && strtolower($filters['periode']) !== 'all'
-            ? $filters['periode']
-            : 'semua';
+                    $tanggal = trim((string) ($mapped['tanggal'] ?? ''));
+                    try {
+                        $tanggal = $tanggal !== '' && !str_starts_with($tanggal, '0000-00-00')
+                            ? Carbon::parse($tanggal)->format('d/m/Y H:i')
+                            : '';
+                    } catch (\Throwable) {
+                        // keep raw
+                    }
 
-        return SmartcardExcelExport::download(
-            'rekap_kas_masuk_keluar_' . $periode,
-            [
-                'Tanggal',
-                'No Bukti',
-                'Nominal Kas Keluar',
-                'Nominal Kas Masuk',
-                'Foto',
-                'Periode',
-                'Tahun',
-                'Keterangan',
-                'Sumber Kas',
-                'Saldo',
-                'Akun Kas Keluar',
-                'Akun Kas Masuk',
-            ],
-            $rows
-        );
+                    $foto = $mapped['foto'] ?? '';
+                    if ($foto === '-') {
+                        $foto = '';
+                    }
+
+                    return [
+                        $tanggal,
+                        $mapped['no_bukti'],
+                        $mapped['nominal_keluar'],
+                        $mapped['nominal_masuk'],
+                        $foto,
+                        $mapped['periode'],
+                        $mapped['tahun'],
+                        $mapped['keterangan'],
+                        $mapped['sumber_kas'] ?? '-',
+                        $running,
+                        $mapped['akun_kas_keluar'],
+                        $mapped['akun_kas_masuk'],
+                    ];
+                })
+                ->all();
+
+            $rows[] = ['', '', '', '', '', '', '', '', 'SALDO', $running, '', ''];
+
+            $periode = $filters['periode'] !== '' && strtolower($filters['periode']) !== 'all'
+                ? preg_replace('/[^A-Za-z0-9_-]/', '_', $filters['periode'])
+                : 'semua';
+
+            return Excel::download(
+                new RekapPencatatanExcelExport($rows),
+                'rekap_kas_masuk_keluar_' . $periode . '.xlsx'
+            );
+        } catch (\Throwable $e) {
+            Log::error('RekapExportExcel export failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return redirect()
+                ->route('admin.pencatatan-sederhana.rekap-export-excel.index')
+                ->with('error', 'Gagal export Excel: ' . $e->getMessage());
+        }
     }
 
     /**

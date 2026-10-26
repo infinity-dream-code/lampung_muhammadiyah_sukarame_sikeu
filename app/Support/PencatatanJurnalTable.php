@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -53,6 +54,58 @@ class PencatatanJurnalTable
     public static function hasNoRefColumn(): bool
     {
         return self::hasColumn('no_ref');
+    }
+
+    public static function hasKodePerkiraanColumn(): bool
+    {
+        return self::hasColumn('kode_perkiraan');
+    }
+
+    /**
+     * Pastikan kolom akun/sumber ada di tabel jurnal supaya nama akun bisa disimpan dan ditampil.
+     */
+    public static function ensureLedgerColumns(): void
+    {
+        $table = self::name();
+
+        try {
+            $schema = Schema::connection('DATA_MYSQL');
+            if (!$schema->hasTable($table)) {
+                return;
+            }
+
+            $definitions = [
+                'NamaAkunMasuk' => 'VARCHAR(80) NULL',
+                'NamaAkunKeluar' => 'VARCHAR(80) NULL',
+                'kode_perkiraan' => 'VARCHAR(20) NULL',
+                'no_ref' => 'VARCHAR(50) NULL',
+                'buktiurl' => 'VARCHAR(255) NULL',
+            ];
+
+            $added = false;
+            foreach ($definitions as $column => $definition) {
+                if ($schema->hasColumn($table, $column)) {
+                    continue;
+                }
+
+                DB::connection('DATA_MYSQL')->statement(
+                    "ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}"
+                );
+                $added = true;
+            }
+
+            if ($added) {
+                self::forgetColumnCache();
+            }
+        } catch (Throwable) {
+            self::forgetColumnCache();
+        }
+    }
+
+    public static function forgetColumnCache(): void
+    {
+        self::$columnCache = [];
+        self::$columns = null;
     }
 
     public static function hasColumn(string $column): bool

@@ -30,8 +30,12 @@ return [
     'email' => env('APP_EMAIL', 'ypisabkho@gmail.com'),
     'telepon' => env('APP_TELEPON', 'SIKEU'),
     'domisili' => env('APP_DOMISILI', 'Kota Bandar Lampung'),
-    // Prefix VA Open Payment / BCN: 777726
-    'nova' => env('APP_NOVA') ?: '777726',
+    // Prefix VA Open Payment / BCN MIT Sukarame: 777726 (jangan 77726)
+    'nova' => (static function () {
+        $raw = preg_replace('/\D/', '', (string) env('APP_NOVA', '777726'));
+
+        return ($raw === '' || $raw === '77726') ? '777726' : $raw;
+    })(),
     'biaya_admin' => env('BIAYA_ADMIN', 0),
     'dummy_seeder' => env('DUMMY_SEEDER',false),
     'demo_mode' => env('DEMO_MODE',false),

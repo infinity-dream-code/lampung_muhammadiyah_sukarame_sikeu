@@ -290,6 +290,7 @@ class EditManualController extends Controller
                 'FSTSBolehBayar' => 1,
                 'BTA' => $tagihan->BTA,
                 'INSTALLMENT' => 0,
+                'FLPART' => null,
                 'isINSTALLABLE' => (int) ($mstTagihan->isINSTALLMENT ?? $tagihan->isINSTALLABLE ?? 0),
             ]);
 
