@@ -10,6 +10,7 @@ use App\Models\scctbill_detail;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
 use App\Support\InputTagihanProcedure;
+use App\Support\NewBillFlags;
 use App\Support\SchoolScope;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -44,6 +45,8 @@ class UploadTagihanExcelController extends Controller
 
     public function index()
     {
+        NewBillFlags::resetUnpaidCicilCount();
+
         $currentYear = (int) date('Y');
 
         $data['title'] = $this->title;
@@ -295,7 +298,7 @@ class UploadTagihanExcelController extends Controller
                     continue;
                 }
 
-                $this->normalizeNewBillFlags(
+                NewBillFlags::normalize(
                     (int) $siswa->CUSTID,
                     $nmTagihan,
                     $bta,
@@ -312,6 +315,8 @@ class UploadTagihanExcelController extends Controller
 
                 $insertedCount++;
             }
+
+            NewBillFlags::resetUnpaidCicilCount($nmTagihan, $bta);
 
             Cache::forget($this->cacheKey);
             $this->bumpDataTagihanCache();
@@ -426,20 +431,6 @@ class UploadTagihanExcelController extends Controller
             'billac' => $billac,
             'nominal' => $nominal,
         ]);
-    }
-
-    private function normalizeNewBillFlags(int $custId, string $billNm, string $billac, int $isInstallable): void
-    {
-        scctbill::query()
-            ->where('CUSTID', $custId)
-            ->where('BILLNM', $billNm)
-            ->where('BILLAC', $billac)
-            ->where('FSTSBolehBayar', 1)
-            ->update([
-                'INSTALLMENT' => 0,
-                'FLPART' => null,
-                'isINSTALLABLE' => $isInstallable,
-            ]);
     }
 
     private function ensureBillDetailForSiswa(int $custId, string $billNm, string $billac, int $nominal, string $kodePost): void

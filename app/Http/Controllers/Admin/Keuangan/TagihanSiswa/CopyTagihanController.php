@@ -9,6 +9,7 @@ use App\Models\mst_thn_aka;
 use App\Models\scctbill;
 use App\Models\scctbill_detail;
 use App\Models\scctcust;
+use App\Support\NewBillFlags;
 use App\Support\SchoolScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -183,6 +184,12 @@ class CopyTagihanController extends Controller
                     'INSTALLMENT' => 0,
                     'isINSTALLABLE' => (int) ($masterCopy?->isINSTALLMENT ?? 0),
                 ]);
+                NewBillFlags::normalize(
+                    (int) $newBill->CUSTID,
+                    (string) $newBill->BILLNM,
+                    (string) $newBill->BILLAC,
+                    (int) ($masterCopy?->isINSTALLMENT ?? 0)
+                );
 
                 $details = scctbill_detail::where('CUSTID', $oldBill->CUSTID)
                     ->where('BILLCD', $oldBill->BILLCD)

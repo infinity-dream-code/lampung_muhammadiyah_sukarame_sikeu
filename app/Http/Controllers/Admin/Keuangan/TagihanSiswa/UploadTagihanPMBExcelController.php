@@ -10,6 +10,7 @@ use App\Models\scctbill;
 use App\Models\scctbill_detail;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
+use App\Support\NewBillFlags;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -224,6 +225,12 @@ class UploadTagihanPMBExcelController extends Controller
                     'FLPART' => null,
                     'isINSTALLABLE' => (int) ($tagihan->isINSTALLMENT ?? 0),
                 ]);
+                NewBillFlags::normalize(
+                    (int) $siswa->CUSTID,
+                    (string) $tagihan->tagihan,
+                    $bta,
+                    (int) ($tagihan->isINSTALLMENT ?? 0)
+                );
 
                 scctbill_detail::create([
                     'KodePost' => $tagihan->kodeAkun(),

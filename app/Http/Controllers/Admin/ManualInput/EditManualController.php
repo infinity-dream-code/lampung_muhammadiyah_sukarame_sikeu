@@ -9,6 +9,7 @@ use App\Models\mst_thn_aka;
 use App\Models\scctbill;
 use App\Models\scctcust;
 use App\Models\ValidationMessage;
+use App\Support\NewBillFlags;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -293,6 +294,12 @@ class EditManualController extends Controller
                 'FLPART' => null,
                 'isINSTALLABLE' => (int) ($mstTagihan->isINSTALLMENT ?? $tagihan->isINSTALLABLE ?? 0),
             ]);
+            NewBillFlags::normalize(
+                (int) $request->siswa,
+                (string) $tagihan->BILLNM,
+                (string) $tagihan->BILLAC,
+                (int) ($mstTagihan->isINSTALLMENT ?? $tagihan->isINSTALLABLE ?? 0)
+            );
 
             DB::commit();
             return response()->json(['message' => 'Tagihan Berhasil Disalin dan disimpan!'], 200);

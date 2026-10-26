@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\ValidationMessage;
 use App\Support\CacheHandler;
 use App\Support\FilterHandler;
+use App\Support\NewBillFlags;
 use App\Support\TagihanPaymentReversal;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -200,6 +201,8 @@ class DataTagihanController extends Controller
 
     public function index()
     {
+        NewBillFlags::resetUnpaidCicilCount();
+
         $data['title'] = $this->title;
         $data['mainTitle'] = $this->mainTitle;
         $data['dataTitle'] = $this->dataTitle;
