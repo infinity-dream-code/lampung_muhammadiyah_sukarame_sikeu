@@ -400,10 +400,8 @@ class SaldoVirtualAccountController extends Controller
             ])
             ->groupBy('CUSTID');
 
-        // Hanya tampilkan siswa yang punya riwayat transaksi transfer/VA
-        // (tanpa transaksi → tidak masuk list).
         $query = scctcust::query()
-            ->joinSub($saldoAgg, 'trx', function ($join) {
+            ->leftJoinSub($saldoAgg, 'trx', function ($join) {
                 $join->on('trx.CUSTID', '=', 'scctcust.CUSTID');
             });
 
@@ -424,21 +422,14 @@ class SaldoVirtualAccountController extends Controller
 
         $scopedCodesForCount = $this->resolveScopedSchoolCodes();
         $totalRecords = Cache::remember(
-            'scctcust_saldo_va_with_trx_count_' . md5(json_encode($scopedCodesForCount)),
+            'scctcust_saldo_va_all_count_' . md5(json_encode($scopedCodesForCount)),
             600,
             function () use ($scopedCodesForCount) {
-                $agg = $this->excludeManualCashScope(sccttran::query())
-                    ->select('CUSTID')
-                    ->groupBy('CUSTID');
-
                 return scctcust::query()
-                    ->joinSub($agg, 'trx', function ($join) {
-                        $join->on('trx.CUSTID', '=', 'scctcust.CUSTID');
-                    })
                     ->when(!empty($scopedCodesForCount), function ($query) use ($scopedCodesForCount) {
-                        $query->whereIn('scctcust.CODE01', $scopedCodesForCount);
+                        $query->whereIn('CODE01', $scopedCodesForCount);
                     })
-                    ->count('scctcust.CUSTID');
+                    ->count('CUSTID');
             }
         );
 
