@@ -10,7 +10,7 @@ use RuntimeException;
 class CloudinaryUpload
 {
     /**
-     * Upload image to Cloudinary folder (default: ponpes_markaz).
+     * Upload image to Cloudinary folder (default: muh_sukarame).
      *
      * @return array{url: string, public_id: string, secure_url: string}
      */
@@ -19,7 +19,7 @@ class CloudinaryUpload
         $cloudName = (string) config('services.cloudinary.cloud_name');
         $apiKey = (string) config('services.cloudinary.api_key');
         $apiSecret = (string) config('services.cloudinary.api_secret');
-        $folder = $folder ?: (string) config('services.cloudinary.folder', 'ponpes_markaz');
+        $folder = $folder ?: (string) config('services.cloudinary.folder', 'muh_sukarame');
 
         if ($cloudName === '' || $apiKey === '' || $apiSecret === '') {
             throw new RuntimeException('Konfigurasi Cloudinary belum lengkap.');

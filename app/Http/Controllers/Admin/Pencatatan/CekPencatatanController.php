@@ -8,6 +8,7 @@ use App\Models\akun_kas_keluar;
 use App\Models\akun_kas_masuk;
 use App\Models\akt_jurnal;
 use App\Support\PencatatanJurnalTable;
+use App\Support\PencatatanPeriode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -28,14 +29,7 @@ class CekPencatatanController extends Controller
 
         try {
             if (Schema::connection('DATA_MYSQL')->hasTable(PencatatanJurnalTable::name())) {
-                $periodes = akt_jurnal::query()
-                    ->whereNotNull('periode')
-                    ->where('periode', '!=', '')
-                    ->distinct()
-                    ->orderByDesc('periode')
-                    ->pluck('periode')
-                    ->values()
-                    ->all();
+                $periodes = PencatatanPeriode::options();
             }
 
             if (Schema::connection('DATA_MYSQL')->hasTable('akun_kas_masuk')) {
@@ -58,7 +52,8 @@ class CekPencatatanController extends Controller
             'mainTitle' => $this->mainTitle,
             'dataTitle' => $this->dataTitle,
             'periodes' => $periodes,
-            'defaultPeriode' => $periodes[0] ?? '',
+            'defaultPeriode' => 'all',
+            'sumberKasOptions' => ['Tunai', 'Transfer Bank', 'Virtual Account', 'Lainnya'],
             'akunMasuk' => $akunMasuk,
             'akunKeluar' => $akunKeluar,
             'columnsUrl' => route('admin.pencatatan-sederhana.cek-pencatatan.get-column'),
@@ -89,6 +84,7 @@ class CekPencatatanController extends Controller
                 'className' => 'text-end',
             ],
             ['data' => 'keterangan', 'name' => 'Keterangan', 'searchable' => true, 'orderable' => true],
+            ['data' => 'sumber_kas', 'name' => 'Sumber Kas', 'searchable' => true, 'orderable' => true],
             ['data' => 'foto', 'name' => 'Foto', 'searchable' => false, 'orderable' => false],
             ['data' => 'periode', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
             ['data' => 'tahun', 'name' => 'Tahun', 'searchable' => true, 'orderable' => true],

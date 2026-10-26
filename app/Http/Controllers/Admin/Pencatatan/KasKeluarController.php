@@ -8,7 +8,7 @@ use App\Models\akun_kas_keluar;
 use App\Models\akt_jurnal;
 use App\Models\ValidationMessage;
 use App\Support\PencatatanJurnalTable;
-use Exception;
+use App\Support\PencatatanPeriode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -41,6 +41,7 @@ class KasKeluarController extends Controller
             'mainTitle' => $this->mainTitle,
             'dataTitle' => $this->dataTitle,
             'akunKeluar' => $akunKeluar,
+            'sumberKasOptions' => $this->sumberKasOptions,
             'columnsUrl' => route('admin.pencatatan-sederhana.kas-keluar.get-column'),
             'datasUrl' => route('admin.pencatatan-sederhana.kas-keluar.get-data'),
             'storeUrl' => route('admin.pencatatan-sederhana.kas-keluar.store'),
@@ -63,6 +64,7 @@ class KasKeluarController extends Controller
             ],
             ['data' => 'keterangan', 'name' => 'Keterangan', 'searchable' => true, 'orderable' => true],
             ['data' => 'NamaAkunKeluar', 'name' => 'Akun Kas Keluar', 'searchable' => true, 'orderable' => true],
+            ['data' => 'sumber_kas', 'name' => 'Sumber Kas', 'searchable' => true, 'orderable' => true],
             ['data' => 'periode', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
         ];
     }
@@ -85,7 +87,11 @@ class KasKeluarController extends Controller
                 $columnSortOrder = strtolower((string) ($columnIndexArr[0]['dir'] ?? 'desc'));
                 $requested = (string) ($columnNameArr[$columnIndex]['data'] ?? 'tanggal');
                 if ($requested !== 'no' && $requested !== '') {
-                    $columnName = $requested === 'debet' ? 'debet' : $requested;
+                    $columnName = match ($requested) {
+                        'debet' => 'debet',
+                        'sumber_kas' => PencatatanJurnalTable::hasNoRefColumn() ? 'no_ref' : 'keterangan',
+                        default => $requested,
+                    };
                 }
             }
 
@@ -115,6 +121,9 @@ class KasKeluarController extends Controller
             if (PencatatanJurnalTable::hasAkunKeluarColumn()) {
                 $select[] = 'NamaAkunKeluar';
             }
+            if (PencatatanJurnalTable::hasNoRefColumn()) {
+                $select[] = 'no_ref';
+            }
 
             $records = $filteredQuery
                 ->orderBy($columnName, in_array($columnSortOrder, ['asc', 'desc'], true) ? $columnSortOrder : 'desc')
@@ -126,6 +135,8 @@ class KasKeluarController extends Controller
                     $row = $item->toArray();
                     $row['NamaAkunKeluar'] = $row['NamaAkunKeluar'] ?? '-';
                     $row['debet'] = (int) ($row['debet'] ?? 0);
+                    $row['sumber_kas'] = trim((string) ($row['no_ref'] ?? '')) ?: '-';
+                    $row['periode'] = PencatatanPeriode::label($row['periode'] ?? '', $row['tahun'] ?? '');
                     return $row;
                 })
                 ->toArray();
@@ -152,6 +163,7 @@ class KasKeluarController extends Controller
         $tanggal = $this->normalizeDatetime(trim((string) $request->input('tanggal', '')));
         $kodeAkun = trim((string) $request->input('kode_akun', ''));
         $keterangan = trim((string) $request->input('keterangan', ''));
+        $sumberKas = trim((string) $request->input('sumber_kas', 'Tunai'));
         $nominal = (int) preg_replace('/\D/', '', (string) $request->input('nominal', '0'));
 
         $validator = Validator::make(
@@ -160,13 +172,15 @@ class KasKeluarController extends Controller
                 'kode_akun' => $kodeAkun,
                 'keterangan' => $keterangan,
                 'nominal' => $nominal,
+                'sumber_kas' => $sumberKas,
                 'bukti_foto' => $request->file('bukti_foto'),
             ],
             [
                 'tanggal' => ['required', 'date'],
-                'kode_akun' => ['required', 'max:5'],
+                'kode_akun' => ['required', 'max:20'],
                 'keterangan' => ['required', 'max:255'],
                 'nominal' => ['required', 'integer', 'min:1'],
+                'sumber_kas' => ['required', 'max:50'],
                 'bukti_foto' => ['nullable', 'image', 'max:5120'],
             ],
             ValidationMessage::messages(),
@@ -179,7 +193,7 @@ class KasKeluarController extends Controller
 
         $akun = akun_kas_keluar::query()->where('KodeAkunKeluar', $kodeAkun)->first();
         if (!$akun) {
-            return response()->json(['message' => 'Akun kas keluar tidak ditemukan'], 422);
+            return response()->json(['message' => 'Akun kas keluar tidak ditemukan. Buat dulu di menu Akun Kas Keluar.'], 422);
         }
 
         $period = $this->periodeFromDate($tanggal);
@@ -189,22 +203,24 @@ class KasKeluarController extends Controller
             DB::connection('DATA_MYSQL')->beginTransaction();
             $this->insertJurnal([
                 'tanggal' => $tanggal,
-                'no_bukti' => $kodeAkun,
+                'no_bukti' => $this->nextNoBukti('KK', $tanggal),
                 'keterangan' => $keterangan,
                 'debet' => $nominal,
                 'kredit' => 0,
                 'tahun' => $period['tahun'],
                 'periode' => $period['periode'],
                 'buktiurl' => $buktiurl,
+                'no_ref' => $sumberKas,
                 'NamaAkunMasuk' => null,
                 'NamaAkunKeluar' => $akun->NamaAkunKeluar,
             ]);
             DB::connection('DATA_MYSQL')->commit();
 
-            return response()->json(['message' => 'Kas keluar berhasil disimpan (debet)']);
-        } catch (Exception $e) {
+            return response()->json(['message' => 'Kas keluar berhasil disimpan']);
+        } catch (\Throwable $e) {
             DB::connection('DATA_MYSQL')->rollBack();
-            return response()->json(['message' => 'Kas keluar gagal disimpan', 'error' => $e->getMessage()], 422);
+            Log::error('KasKeluar store failed', ['message' => $e->getMessage()]);
+            return response()->json(['message' => 'Kas keluar gagal disimpan: ' . $e->getMessage(), 'error' => $e->getMessage()], 422);
         }
     }
 }

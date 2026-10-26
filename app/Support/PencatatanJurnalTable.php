@@ -12,6 +12,9 @@ class PencatatanJurnalTable
     /** @var array<string, bool> */
     private static array $columnCache = [];
 
+    /** @var list<string>|null */
+    private static ?array $columns = null;
+
     public static function name(): string
     {
         if (self::$resolved !== null) {
@@ -47,17 +50,35 @@ class PencatatanJurnalTable
         return self::hasColumn('buktiurl');
     }
 
-    private static function hasColumn(string $column): bool
+    public static function hasNoRefColumn(): bool
+    {
+        return self::hasColumn('no_ref');
+    }
+
+    public static function hasColumn(string $column): bool
     {
         if (array_key_exists($column, self::$columnCache)) {
             return self::$columnCache[$column];
         }
 
         try {
-            return self::$columnCache[$column] = Schema::connection('DATA_MYSQL')
-                ->hasColumn(self::name(), $column);
+            return self::$columnCache[$column] = in_array($column, self::columns(), true);
         } catch (Throwable) {
             return self::$columnCache[$column] = false;
+        }
+    }
+
+    /** @return list<string> */
+    public static function columns(): array
+    {
+        if (self::$columns !== null) {
+            return self::$columns;
+        }
+
+        try {
+            return self::$columns = Schema::connection('DATA_MYSQL')->getColumnListing(self::name());
+        } catch (Throwable) {
+            return self::$columns = [];
         }
     }
 }

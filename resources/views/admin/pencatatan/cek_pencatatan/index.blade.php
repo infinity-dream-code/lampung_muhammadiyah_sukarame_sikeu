@@ -83,11 +83,15 @@
                 <fieldset class="form-fieldset">
                     <div class="row g-3 align-items-end">
                         <div class="col-md-3">
-                            <label class="form-label" for="filter_periode">Tahun Periode</label>
+                            <label class="form-label" for="filter_periode">Periode</label>
                             <select class="form-select" id="filter_periode" name="filter[periode]" data-control="select2">
-                                <option value="all">Semua</option>
+                                <option value="all" @selected(($defaultPeriode ?? 'all') === 'all')>Semua</option>
                                 @foreach($periodes as $periode)
-                                    <option value="{{ $periode }}" @selected(($defaultPeriode ?? '') === $periode)>{{ $periode }}</option>
+                                    @php
+                                        $periodeValue = is_array($periode) ? ($periode['value'] ?? '') : $periode;
+                                        $periodeLabel = is_array($periode) ? ($periode['label'] ?? $periodeValue) : $periode;
+                                    @endphp
+                                    <option value="{{ $periodeValue }}" @selected(($defaultPeriode ?? '') === $periodeValue)>{{ $periodeLabel }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -121,6 +125,15 @@
                                 <option value="all">Semua</option>
                                 @foreach($akunMasuk as $item)
                                     <option value="{{ $item->NamaAkunMasuk }}">{{ $item->NamaAkunMasuk }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="filter_sumber_kas">Sumber Kas</label>
+                            <select class="form-select" id="filter_sumber_kas" name="filter[sumber_kas]" data-control="select2">
+                                <option value="all">Semua</option>
+                                @foreach(($sumberKasOptions ?? []) as $sumber)
+                                    <option value="{{ $sumber }}">{{ $sumber }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -228,6 +241,10 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('#filter_tanggal_dari, #filter_tanggal_sampai').forEach(function (el) {
+                el.addEventListener('change', function () { this.blur(); });
+            });
+
             document.querySelectorAll("[data-control='select2']").forEach(select => {
                 let wrapper = document.createElement('div');
                 wrapper.classList.add('position-relative');
@@ -251,7 +268,7 @@
                 });
                 filterForm.addEventListener('reset', function () {
                     setTimeout(function () {
-                        $('#filter_periode, #filter_akun_masuk, #filter_akun_keluar').val('all').trigger('change');
+                        $('#filter_periode, #filter_akun_masuk, #filter_akun_keluar, #filter_sumber_kas').val('all').trigger('change');
                         dataReFilter(dtOptions.tableId);
                         clearDetail();
                     }, 0);

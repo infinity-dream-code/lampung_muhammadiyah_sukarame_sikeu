@@ -10,7 +10,7 @@
         <li class="breadcrumb-item">{{ $title ?? 'Pencatatan Sederhana' }}</li>
         <li class="breadcrumb-item active">{{ $mainTitle ?? 'Kas Masuk' }}</li>
     </ul>
-    <div class="alert alert-info py-2">Kas masuk: kolom <strong>kredit</strong> terisi, <strong>debet</strong> = 0.</div>
+    <div class="alert alert-info py-2">Kas masuk: uang masuk ke kas. Kelompok penerimaan mengikuti master tagihan. Centang <strong>Saldo Awal</strong> untuk input saldo pembuka periode.</div>
     <div class="card">
         <div class="card-header header-elements">
             <h5 class="mb-0 me-2">{{ $dataTitle ?? 'Kas Masuk' }}</h5>
@@ -34,6 +34,10 @@
         const dtOptions = { tableId: 'main_table', formId: false, columnUrl: '{{ $columnsUrl }}', dataUrl: '{{ $datasUrl }}', dataColumns: [], thead: true, paging: true, searching: true, pageLength: 10, order: [[1, 'desc']] };
         document.addEventListener('DOMContentLoaded', function () {
             $('#kode_akun').select2({ dropdownParent: $('#modal-create'), width: '100%' });
+            const tanggal = document.querySelector('#addForm [name="tanggal"]');
+            if (tanggal) {
+                tanggal.addEventListener('change', function () { this.blur(); });
+            }
             if (dtOptions.dataUrl && dtOptions.columnUrl) getDT(dtOptions);
         });
     </script>
@@ -43,11 +47,32 @@
                 <div class="modal-content">
                     <div class="modal-header"><h5 class="modal-title">Tambah Kas Masuk</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <div class="mb-3"><label class="form-label required">Tanggal</label><input type="datetime-local" class="form-control" name="tanggal" required></div>
-                        <div class="mb-3"><label class="form-label required">Akun Kas Masuk</label>
+                        <div class="mb-3">
+                            <label class="form-label required">Tanggal</label>
+                            <input type="date" class="form-control" name="tanggal" required autocomplete="off">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="saldo_awal" value="1" id="saldo_awal">
+                                <label class="form-check-label" for="saldo_awal">Ini <strong>Saldo Awal</strong> periode</label>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="wrap-kelompok">
+                            <label class="form-label required">Kelompok Penerimaan</label>
                             <select class="form-select" name="kode_akun" id="kode_akun" required>
-                                <option value="">Pilih akun</option>
-                                @foreach($akunMasuk as $a)<option value="{{ $a->KodeAkunMasuk }}">{{ $a->KodeAkunMasuk }} - {{ $a->NamaAkunMasuk }}</option>@endforeach
+                                <option value="">Pilih kelompok / akun</option>
+                                @foreach($akunMasuk as $a)
+                                    <option value="{{ $a->KodeAkunMasuk }}">{{ $a->KodeAkunMasuk }} - {{ $a->NamaAkunMasuk }}</option>
+                                @endforeach
+                            </select>
+                            <div class="form-text">Diambil dari master tagihan (SPP, dll) plus akun kas masuk.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label required">Sumber Kas</label>
+                            <select class="form-select" name="sumber_kas" required>
+                                @foreach(($sumberKasOptions ?? ['Tunai','Transfer Bank','Virtual Account','Lainnya']) as $sumber)
+                                    <option value="{{ $sumber }}" @selected($sumber === 'Tunai')>{{ $sumber }}</option>
+                                @endforeach
                             </select>
                         </div>
                         <div class="mb-3"><label class="form-label required">Nominal</label><input type="number" class="form-control" name="nominal" min="1" required></div>
@@ -55,7 +80,7 @@
                         <div class="mb-3">
                             <label class="form-label">Foto Bukti</label>
                             <input type="file" class="form-control" name="bukti_foto" accept="image/*">
-                            <div class="form-text">Upload ke Cloudinary folder <code>ponpes_markaz</code></div>
+                            <div class="form-text">Opsional. Foto disimpan di sekolah ini, bukan folder proyek lain.</div>
                         </div>
                     </div>
                     <div class="modal-footer"><button type="reset" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-primary">Simpan</button></div>
@@ -64,16 +89,42 @@
         </div>
     </form>
     <script>
+        const saldoAwal = document.getElementById('saldo_awal');
+        const kodeAkun = document.getElementById('kode_akun');
+        saldoAwal?.addEventListener('change', function () {
+            const wrap = document.getElementById('wrap-kelompok');
+            if (this.checked) {
+                kodeAkun.removeAttribute('required');
+                wrap?.classList.add('d-none');
+            } else {
+                kodeAkun.setAttribute('required', 'required');
+                wrap?.classList.remove('d-none');
+            }
+        });
+
         document.getElementById('addForm').addEventListener('submit', function (e) {
             e.preventDefault();
             loadingAlert();
             const csrf = document.querySelector('meta[name="csrf-token"]').content;
             const fd = new FormData(this);
             fd.append('_token', csrf);
-            fetch('{{ $storeUrl }}', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf }, body: fd })
-                .then(r => r.ok ? r.json() : r.json().then(err => Promise.reject({ status: r.status, error: err })))
-                .then(d => { successAlert(d.message); dataReload('main_table'); bootstrap.Modal.getInstance(document.getElementById('modal-create')).hide(); this.reset(); $('#kode_akun').val('').trigger('change'); })
-                .catch(err => errorAlert(err.error?.message || 'Gagal menyimpan'));
+            fetch('{{ $storeUrl }}', {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            })
+                .then(r => r.json().then(body => ({ ok: r.ok, body })).catch(() => ({ ok: false, body: {} })))
+                .then(({ ok, body }) => {
+                    if (!ok) throw body;
+                    successAlert(body.message);
+                    dataReload('main_table');
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('modal-create')).hide();
+                    this.reset();
+                    $('#kode_akun').val('').trigger('change');
+                    document.getElementById('wrap-kelompok')?.classList.remove('d-none');
+                    kodeAkun.setAttribute('required', 'required');
+                })
+                .catch(err => errorAlert(err.message || err.error || 'Gagal menyimpan'));
         });
     </script>
 @endsection

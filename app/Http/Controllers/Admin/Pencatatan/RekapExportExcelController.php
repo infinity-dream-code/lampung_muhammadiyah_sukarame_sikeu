@@ -8,6 +8,7 @@ use App\Models\akun_kas_keluar;
 use App\Models\akun_kas_masuk;
 use App\Models\akt_jurnal;
 use App\Support\PencatatanJurnalTable;
+use App\Support\PencatatanPeriode;
 use App\Support\SmartcardExcelExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -30,14 +31,7 @@ class RekapExportExcelController extends Controller
 
         try {
             if (Schema::connection('DATA_MYSQL')->hasTable(PencatatanJurnalTable::name())) {
-                $periodes = akt_jurnal::query()
-                    ->whereNotNull('periode')
-                    ->where('periode', '!=', '')
-                    ->distinct()
-                    ->orderByDesc('periode')
-                    ->pluck('periode')
-                    ->values()
-                    ->all();
+                $periodes = PencatatanPeriode::options();
             }
 
             if (Schema::connection('DATA_MYSQL')->hasTable('akun_kas_masuk')) {
@@ -60,7 +54,8 @@ class RekapExportExcelController extends Controller
             'mainTitle' => $this->mainTitle,
             'dataTitle' => $this->dataTitle,
             'periodes' => $periodes,
-            'defaultPeriode' => $periodes[0] ?? '',
+            'defaultPeriode' => 'all',
+            'sumberKasOptions' => ['Tunai', 'Transfer Bank', 'Virtual Account', 'Lainnya'],
             'akunMasuk' => $akunMasuk,
             'akunKeluar' => $akunKeluar,
             'columnsUrl' => route('admin.pencatatan-sederhana.rekap-export-excel.get-column'),
@@ -95,6 +90,7 @@ class RekapExportExcelController extends Controller
             ['data' => 'periode', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
             ['data' => 'tahun', 'name' => 'Tahun', 'searchable' => true, 'orderable' => true],
             ['data' => 'keterangan', 'name' => 'Keterangan', 'searchable' => true, 'orderable' => true],
+            ['data' => 'sumber_kas', 'name' => 'Sumber Kas', 'searchable' => true, 'orderable' => true],
             [
                 'data' => 'saldo',
                 'name' => 'Saldo',
@@ -184,6 +180,7 @@ class RekapExportExcelController extends Controller
                     $mapped['periode'],
                     $mapped['tahun'],
                     $mapped['keterangan'],
+                    $mapped['sumber_kas'] ?? '-',
                     $mapped['saldo'],
                     $mapped['akun_kas_keluar'],
                     $mapped['akun_kas_masuk'],
@@ -191,7 +188,7 @@ class RekapExportExcelController extends Controller
             })
             ->all();
 
-        $rows[] = ['', '', '', '', '', '', '', 'SALDO', $saldo, '', ''];
+        $rows[] = ['', '', '', '', '', '', '', '', 'SALDO', $saldo, '', ''];
 
         $periode = $filters['periode'] !== '' && strtolower($filters['periode']) !== 'all'
             ? $filters['periode']
@@ -208,6 +205,7 @@ class RekapExportExcelController extends Controller
                 'Periode',
                 'Tahun',
                 'Keterangan',
+                'Sumber Kas',
                 'Saldo',
                 'Akun Kas Keluar',
                 'Akun Kas Masuk',
@@ -237,6 +235,7 @@ class RekapExportExcelController extends Controller
             'tanggal_sampai' => trim((string) ($filter['tanggal_sampai'] ?? '')),
             'akun_masuk' => trim((string) ($filter['akun_masuk'] ?? '')),
             'akun_keluar' => trim((string) ($filter['akun_keluar'] ?? '')),
+            'sumber_kas' => trim((string) ($filter['sumber_kas'] ?? '')),
         ], $searchValue];
     }
 

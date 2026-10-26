@@ -6,6 +6,7 @@ use App\Models\akun_kas_keluar;
 use App\Models\akun_kas_masuk;
 use App\Models\akt_jurnal;
 use App\Support\PencatatanJurnalTable;
+use App\Support\PencatatanPeriode;
 use Illuminate\Database\Eloquent\Builder;
 
 trait QueriesAktJurnal
@@ -29,7 +30,6 @@ trait QueriesAktJurnal
             'periode',
         ];
 
-        // DB MIT lama belum punya buktiurl / NamaAkun* — jangan select biar tidak 500.
         if (PencatatanJurnalTable::hasBuktiUrlColumn()) {
             $select[] = 'buktiurl';
         }
@@ -38,6 +38,9 @@ trait QueriesAktJurnal
         }
         if (PencatatanJurnalTable::hasAkunKeluarColumn()) {
             $select[] = 'NamaAkunKeluar';
+        }
+        if (PencatatanJurnalTable::hasNoRefColumn()) {
+            $select[] = 'no_ref';
         }
 
         return akt_jurnal::query()->select($select);
@@ -61,6 +64,9 @@ trait QueriesAktJurnal
                 if (PencatatanJurnalTable::hasAkunKeluarColumn()) {
                     $q->orWhere('NamaAkunKeluar', 'like', '%' . $searchValue . '%');
                 }
+                if (PencatatanJurnalTable::hasNoRefColumn()) {
+                    $q->orWhere('no_ref', 'like', '%' . $searchValue . '%');
+                }
             });
         }
 
@@ -71,9 +77,24 @@ trait QueriesAktJurnal
         $filterTanggalSampai = trim((string) ($filters['tanggal_sampai'] ?? ''));
         $filterAkunMasuk = trim((string) ($filters['akun_masuk'] ?? ''));
         $filterAkunKeluar = trim((string) ($filters['akun_keluar'] ?? ''));
+        $filterSumber = trim((string) ($filters['sumber_kas'] ?? ''));
 
         if ($filterPeriode !== '' && strtolower($filterPeriode) !== 'all') {
-            $query->where('periode', $filterPeriode);
+            $parsed = PencatatanPeriode::parse($filterPeriode);
+            $matches = PencatatanPeriode::matchValues($filterPeriode);
+
+            $query->where(function ($q) use ($parsed, $matches) {
+                $q->whereIn('periode', $matches);
+                if ($parsed['tahun'] && $parsed['bulan']) {
+                    $q->orWhere(function ($inner) use ($parsed) {
+                        $inner->where('tahun', $parsed['tahun'])
+                            ->whereIn('periode', [
+                                (string) $parsed['bulan'],
+                                sprintf('%02d', $parsed['bulan']),
+                            ]);
+                    });
+                }
+            });
         }
 
         if ($filterNoBukti !== '') {
@@ -117,6 +138,10 @@ trait QueriesAktJurnal
                 }
             }
         }
+
+        if ($filterSumber !== '' && strtolower($filterSumber) !== 'all' && PencatatanJurnalTable::hasNoRefColumn()) {
+            $query->where('no_ref', $filterSumber);
+        }
     }
 
     /**
@@ -138,6 +163,8 @@ trait QueriesAktJurnal
         $bukti = trim((string) ($item->buktiurl ?? ''));
         if ($bukti === '' || $bukti === '-') {
             $bukti = '-';
+        } elseif (str_starts_with($bukti, '/uploads/')) {
+            $bukti = url($bukti);
         }
 
         $namaMasuk = $item->NamaAkunMasuk ?? null;
@@ -161,8 +188,10 @@ trait QueriesAktJurnal
             'keterangan' => $item->keterangan ?? '',
             'foto' => $bukti,
             'buktiurl' => $bukti,
-            'periode' => $item->periode ?? '',
+            'periode' => PencatatanPeriode::label($item->periode ?? '', $item->tahun ?? ''),
+            'periode_raw' => $item->periode ?? '',
             'tahun' => $item->tahun ?? '',
+            'sumber_kas' => trim((string) ($item->no_ref ?? '')) ?: '-',
             'akun_kas_keluar' => $namaKeluar ?: '-',
             'akun_kas_masuk' => $namaMasuk ?: '-',
         ];
@@ -230,6 +259,7 @@ trait QueriesAktJurnal
             'keterangan' => 'keterangan',
             'periode' => 'periode',
             'tahun' => 'tahun',
+            'sumber_kas' => 'no_ref',
         ];
 
         if (PencatatanJurnalTable::hasAkunKeluarColumn()) {
