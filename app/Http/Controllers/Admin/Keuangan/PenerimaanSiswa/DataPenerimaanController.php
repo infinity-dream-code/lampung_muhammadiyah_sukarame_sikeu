@@ -621,33 +621,34 @@ class DataPenerimaanController extends Controller
     public function destroy($id, Request $request)
     {
         $custId = $request->input('user_id') ?? $request->input('custid');
-
-        $tagihan = scctbill::where('AA', $id)
-            ->when($custId, fn ($q) => $q->where('CUSTID', $custId))
-            ->first();
-
-        if (!$tagihan) {
-            return response()->json(['message' => 'Tagihan tidak ditemukan!'], 422);
-        }
-
-        if (!app(TagihanPaymentReversal::class)->hasBillPayments($tagihan)) {
-            return response()->json(['message' => 'Pembayaran tidak ditemukan atau sudah di-reversal!'], 422);
-        }
-
-        $custId = (string) $tagihan->CUSTID;
-        $aa = (string) $tagihan->AA;
+        $aa = (string) $id;
         $username = (string) (Auth::user()->username ?? Auth::id() ?? 'system');
 
-        Log::info('data-penerimaan.destroy.start', [
-            'aa' => $aa,
-            'custid' => $custId,
-            'username' => $username,
-            'fidbank' => $tagihan->FIDBANK,
-            'billnm' => $tagihan->BILLNM,
-            'billpaid' => $tagihan->BILLPAID,
-        ]);
-
         try {
+            $tagihan = scctbill::where('AA', $id)
+                ->when($custId, fn ($q) => $q->where('CUSTID', $custId))
+                ->first();
+
+            if (!$tagihan) {
+                return response()->json(['message' => 'Tagihan tidak ditemukan!'], 422);
+            }
+
+            if (!app(TagihanPaymentReversal::class)->hasBillPayments($tagihan)) {
+                return response()->json(['message' => 'Pembayaran tidak ditemukan atau sudah di-reversal!'], 422);
+            }
+
+            $custId = (string) $tagihan->CUSTID;
+            $aa = (string) $tagihan->AA;
+
+            Log::info('data-penerimaan.destroy.start', [
+                'aa' => $aa,
+                'custid' => $custId,
+                'username' => $username,
+                'fidbank' => $tagihan->FIDBANK,
+                'billnm' => $tagihan->BILLNM,
+                'billpaid' => $tagihan->BILLPAID,
+            ]);
+
             app(TagihanPaymentReversal::class)->reverseLastPayment($tagihan, $request);
 
             Cache::increment(Str::slug($this->cacheKey) . '_cache_version');
@@ -662,7 +663,7 @@ class DataPenerimaanController extends Controller
             Log::error('data-penerimaan.destroy.failed', [
                 'aa' => $aa,
                 'custid' => $custId,
-                'fidbank' => $tagihan->FIDBANK,
+                'fidbank' => isset($tagihan) ? $tagihan->FIDBANK : null,
                 'error' => $e->getMessage(),
                 'code' => $e->getCode(),
                 'trace' => $e->getTraceAsString(),

@@ -128,6 +128,7 @@ Route::prefix("admin")
                         Route::get("get-trans-log/{id}", "getTransLog")->name("get-trans-log");
                         Route::get("cetak-rekap", "cetak")->name("cetak-rekap");
                         Route::post("ubah-urutan/{id}", "ubahUrutan")->name("ubah-urutan");
+                        Route::post("reversal/{id}", "destroy")->name("reversal");
                         Route::delete("hapus/{id}", "hapusTagihan")->name("hapus");
                         Route::get("cetak-kartu-siswa", "cetakKartuSiswa")->name("cetak-kartu-siswa");
                         Route::resource("", \App\Http\Controllers\Admin\Keuangan\TagihanSiswa\DataTagihanController::class)->parameters(["" => "id"]);
@@ -156,6 +157,7 @@ Route::prefix("admin")
                         Route::get("cetak-rekap-new", "cetakNew")->name("cetak-rekap-new");
                         Route::get("cetak-kartu-siswa", "cetakKartuSiswa")->name("cetak-kartu-siswa");
                         Route::get("cetak-tagihan-dibayar", "cetakPembayaran")->name("cetak-tagihan-dibayar");
+                        Route::post("reversal/{id}", "destroy")->name("reversal");
                         Route::resource("", \App\Http\Controllers\Admin\Keuangan\PenerimaanSiswa\DataPenerimaanController::class)->parameters(["" => "id"]);
                     });
                 });

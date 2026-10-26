@@ -381,7 +381,6 @@ class DataTagihanController extends Controller
 
         $tagihan = scctbill::where('AA', $id)
             ->where('FSTSBolehBayar', '=', 1)
-            ->where('PAIDST', '=', 0)
             ->when($custId, fn ($q) => $q->where('CUSTID', $custId))
             ->first();
 

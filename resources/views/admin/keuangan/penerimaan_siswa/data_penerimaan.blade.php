@@ -702,7 +702,7 @@
                     loadingAlert('Memproses reversal....');
                     const item_id = document.getElementById('delete_id').value;
                     const user_id = document.getElementById('user_delete_id').value;
-                    let url = '{{route('admin.keuangan.penerimaan-siswa.data-penerimaan.destroy',':id')}}'
+                    let url = '{{route('admin.keuangan.penerimaan-siswa.data-penerimaan.reversal',':id')}}'
                     url = url.replace(':id', item_id)
 
                     if (!item_id || !user_id) {
@@ -711,9 +711,11 @@
                     }
                     request = new Request(
                         url, {
-                            method: "DELETE",
+                            method: "POST",
                             headers: {
                                 'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
                                 'X-CSRF-TOKEN': csrfToken,
                             }, body: JSON.stringify({
                                 user_id: user_id,
@@ -761,7 +763,8 @@
                             419: '',
                             429: 'Terlalu banyak permintaan akses <br>silahkan tunggu beberapa saat 🙏',
                         };
-                        errorAlert(errorMessages[error.status] || "Terjadi kesalahan, silahkan coba memuat ulang halaman");
+                        const detail = error.error ? `<br><small class="text-muted">${error.error}</small>` : '';
+                        errorAlert((error.message || errorMessages[error.status] || "Terjadi kesalahan, silahkan coba memuat ulang halaman") + detail);
                     }
                 });
         }

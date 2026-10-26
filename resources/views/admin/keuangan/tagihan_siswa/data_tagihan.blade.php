@@ -1021,17 +1021,20 @@
                     loadingAlert('Memproses data....');
                     item_id = document.getElementById('delete_id').value;
                     user_id = document.getElementById('user_delete_id').value;
-                    url = '{{route('admin.keuangan.tagihan-siswa.data-tagihan.destroy',':id')}}'
+                    url = '{{route('admin.keuangan.tagihan-siswa.data-tagihan.reversal',':id')}}'
                     url = url.replace(':id', item_id)
 
                     request = new Request(
                         url, {
-                            method: "DELETE",
+                            method: "POST",
                             headers: {
                                 'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
                                 'X-CSRF-TOKEN': csrfToken,
                             }, body: JSON.stringify({
-                                user_id: user_id
+                                user_id: user_id,
+                                custid: user_id,
                             })
                         });
                     break;
@@ -1105,7 +1108,7 @@
                             419: '',
                             429: 'Terlalu banyak permintaan akses <br>silahkan tunggu beberapa saat 🙏',
                         };
-                        errorAlert(errorMessages[error.status] || "Terjadi kesalahan, silahkan coba memuat ulang halaman");
+                        errorAlert(error.message || errorMessages[error.status] || "Terjadi kesalahan, silahkan coba memuat ulang halaman");
                     }
                 });
         }
