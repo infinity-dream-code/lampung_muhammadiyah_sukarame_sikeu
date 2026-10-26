@@ -22,7 +22,11 @@ class RedirectIfAuthenticated
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
                 $intended = $request->session()->pull('url.intended');
-                if (is_string($intended) && !PersistentLogin::isAuthUrl($intended)) {
+                if (
+                    is_string($intended)
+                    && !PersistentLogin::isAuthUrl($intended)
+                    && !PersistentLogin::isNonPageUrl($intended)
+                ) {
                     return redirect()->to($intended);
                 }
 

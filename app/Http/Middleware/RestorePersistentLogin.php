@@ -28,6 +28,10 @@ class RestorePersistentLogin
                 // Biarkan RetryTransientGet / Handler mengulang GET.
             }
 
+            if ($bare = PersistentLogin::redirectIfBareDataEndpoint($request)) {
+                return $bare;
+            }
+
             PersistentLogin::rememberContinueUrl($request);
 
             if (

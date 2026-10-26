@@ -177,7 +177,7 @@ class PersistentLogin
             }
 
             $absolute = self::cleanUrl($absolute);
-            if (self::isAuthUrl($absolute)) {
+            if (self::isAuthUrl($absolute) || self::isNonPageUrl($absolute)) {
                 continue;
             }
 
@@ -189,7 +189,13 @@ class PersistentLogin
 
     public static function rememberContinueUrl(Request $request): void
     {
-        if (!$request->hasSession() || !$request->isMethod('GET') || self::isAuthUrl($request->fullUrl())) {
+        if (
+            !$request->hasSession()
+            || !$request->isMethod('GET')
+            || self::isAuthUrl($request->fullUrl())
+            || self::isNonPageUrl($request->fullUrl())
+            || self::isAjaxRequest($request)
+        ) {
             return;
         }
 
@@ -212,6 +218,64 @@ class PersistentLogin
             || $path === 'register'
             || str_starts_with($path, 'password')
             || str_starts_with($path, 'email/');
+    }
+
+    /**
+     * Endpoint JSON/DataTables/export — bukan halaman yang boleh jadi tujuan redirect.
+     */
+    public static function isNonPageUrl(?string $url): bool
+    {
+        if (!is_string($url) || $url === '') {
+            return true;
+        }
+
+        $path = strtolower(trim((string) parse_url($url, PHP_URL_PATH), '/'));
+        if ($path === '') {
+            return false;
+        }
+
+        foreach ([
+            'get-data',
+            'get-column',
+            'keep-alive',
+            'reload-captcha',
+            'reload-math-captcha',
+            'get-siswa',
+            'get-tagihan',
+            'get-detail-tagihan',
+            'get-detail-taighan',
+            'get-logo',
+            'get-saldo',
+        ] as $needle) {
+            if ($path === $needle || str_ends_with($path, '/'.$needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function redirectIfBareDataEndpoint(Request $request): ?Response
+    {
+        if (!$request->isMethod('GET') || self::isAjaxRequest($request) || $request->has('draw')) {
+            return null;
+        }
+
+        $path = trim($request->path(), '/');
+        if ($path === '' || !self::isNonPageUrl('/'.$path)) {
+            return null;
+        }
+
+        if (!str_ends_with($path, '/get-data') && !str_ends_with($path, '/get-column')) {
+            return null;
+        }
+
+        $parent = preg_replace('#/(get-data|get-column)$#', '', '/'.$path);
+        if (!is_string($parent) || $parent === '' || $parent === '/') {
+            $parent = '/admin';
+        }
+
+        return redirect()->to($parent);
     }
 
     /**
@@ -378,7 +442,13 @@ class PersistentLogin
             return null;
         }
 
-        if (!$request->isMethod('GET') || self::isAuthUrl($request->fullUrl()) || $request->routeIs('admin.keep-alive')) {
+        if (
+            !$request->isMethod('GET')
+            || self::isAuthUrl($request->fullUrl())
+            || self::isNonPageUrl($request->fullUrl())
+            || self::isAjaxRequest($request)
+            || $request->routeIs('admin.keep-alive')
+        ) {
             $fromCookie = self::pathFromCookie($request);
             if ($fromCookie) {
                 $path = parse_url($fromCookie, PHP_URL_PATH);
