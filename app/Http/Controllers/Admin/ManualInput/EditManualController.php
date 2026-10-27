@@ -192,7 +192,8 @@ class EditManualController extends Controller
         }
 
         $billPaid = (int) ($tagihan->BILLPAID ?? 0);
-        if ($billPaid > 0 || (int) ($tagihan->isINSTALLABLE ?? 0) > 0) {
+        $cicilan = (int) ($tagihan->INSTALLMENT ?? 0);
+        if ($billPaid > 0 || $cicilan > 0) {
             return response()->json(['message' => 'Tagihan yang sudah pernah dibayar (cicilan) tidak bisa diedit di sini!'], 422);
         }
 
