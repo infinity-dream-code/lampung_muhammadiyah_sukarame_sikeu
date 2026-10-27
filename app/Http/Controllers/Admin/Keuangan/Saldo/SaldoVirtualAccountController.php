@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Facades\Excel;
 use Mockery\Exception;
@@ -35,7 +36,7 @@ class SaldoVirtualAccountController extends Controller
     private const FIDBANK_MANUAL_CASH = '1140000';
 
     /**
-     * @return array{query: \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder, join: string}
+     * @return array{mode: string, join: string, saldo: string, query: \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|null}
      */
     private function saldoVaSource(): array
     {
@@ -47,17 +48,11 @@ class SaldoVirtualAccountController extends Controller
                 $hasNocust = in_array('NOCUST', $cols, true);
 
                 if ($saldoCol && ($hasCustId || $hasNocust)) {
-                    $select = [DB::raw('CAST(COALESCE(' . $saldoCol . ', 0) AS SIGNED) as saldo')];
-                    if ($hasCustId) {
-                        $select[] = 'CUSTID';
-                    }
-                    if ($hasNocust) {
-                        $select[] = 'NOCUST';
-                    }
-
                     return [
-                        'query' => DB::connection('DATA_MYSQL')->table('v_saldo_va')->select($select),
+                        'mode' => 'view',
                         'join' => $hasCustId ? 'CUSTID' : 'NOCUST',
+                        'saldo' => $saldoCol,
+                        'query' => null,
                     ];
                 }
             }
@@ -65,6 +60,16 @@ class SaldoVirtualAccountController extends Controller
             //
         }
 
+        return [
+            'mode' => 'agg',
+            'join' => 'CUSTID',
+            'saldo' => 'saldo',
+            'query' => $this->saldoTranAggregateQuery(),
+        ];
+    }
+
+    private function saldoTranAggregateQuery()
+    {
         $query = sccttran::query()
             ->select([
                 'CUSTID',
@@ -84,7 +89,33 @@ class SaldoVirtualAccountController extends Controller
             //
         }
 
-        return ['query' => $query, 'join' => 'CUSTID'];
+        return $query;
+    }
+
+    /**
+     * @param  array{mode: string, join: string, saldo: string, query: mixed}  $src
+     */
+    private function applySaldoJoin($query, array $src)
+    {
+        if (($src['mode'] ?? '') === 'view') {
+            $joinCol = $src['join'] === 'NOCUST' ? 'NOCUST' : 'CUSTID';
+
+            return $query->leftJoin('v_saldo_va as trx', 'trx.'.$joinCol, '=', 'scctcust.'.$joinCol);
+        }
+
+        return $query->leftJoinSub($src['query'] ?? $this->saldoTranAggregateQuery(), 'trx', function ($join) {
+            $join->on('trx.CUSTID', '=', 'scctcust.CUSTID');
+        });
+    }
+
+    /**
+     * @param  array{mode: string, join: string, saldo: string, query: mixed}  $src
+     */
+    private function saldoSql(array $src): string
+    {
+        $col = $src['saldo'] ?? 'saldo';
+
+        return 'COALESCE(trx.'.$col.', 0)';
     }
 
     /** Tampilkan semua transaksi sccttran kecuali manual cash (1140000). */
@@ -347,12 +378,37 @@ class SaldoVirtualAccountController extends Controller
 
     public function getData(Request $request)
     {
+        try {
+            return $this->buildSaldoVaTable($request);
+        } catch (\Throwable $e) {
+            Log::error('Saldo VA getData failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'draw' => (int) $request->get('draw', 0),
+                'recordsTotal' => 0,
+                'recordsFiltered' => 0,
+                'data' => [],
+                'message' => 'Gagal memuat data saldo virtual account',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function buildSaldoVaTable(Request $request)
+    {
         $filters = [];
         $filterQuery = null;
 
         $draw = $request->get('draw');
-        $start = $request->get("start");
-        $rowperpage = $request->get("length");
+        $start = max(0, (int) $request->get('start', 0));
+        $rowperpage = (int) $request->get('length', 10);
+        if ($rowperpage <= 0) {
+            $rowperpage = 10;
+        }
 
         $columnName_arr = $request->get('columns');
         $search_arr = $request->get('search');
@@ -377,8 +433,11 @@ class SaldoVirtualAccountController extends Controller
             $columnSortOrder = $defaultOrder;
         }
 
+        $saldoSrc = $this->saldoVaSource();
+        $saldoExpr = $this->saldoSql($saldoSrc);
+
         if ($columnName === 'saldo') {
-            $columnName = DB::raw('(COALESCE(trx.kredit, 0) - COALESCE(trx.debet, 0))');
+            $columnName = DB::raw($saldoExpr);
         } elseif (!str_contains($columnName, '.')) {
             $columnName = 'scctcust.' . $columnName;
         }
@@ -405,7 +464,7 @@ class SaldoVirtualAccountController extends Controller
                         $filters[] = ['scctcust.CODE01', '=', trim((string) $val)];
                     } else if ($key == 'saldo_positif') {
                         if ((string) $val === '1') {
-                            $filters[] = ['whereRaw', '(COALESCE(trx.kredit, 0) - COALESCE(trx.debet, 0)) > 0', []];
+                            $filters[] = ['whereRaw', $saldoExpr . ' > 0', []];
                         }
                     } else {
                         ($colName) && $filters[] = [$colName, '=', $val];
@@ -443,16 +502,7 @@ class SaldoVirtualAccountController extends Controller
             'scctcust.DESC04',
         ]));
 
-        $saldoSrc = $this->saldoVaSource();
-
-        $query = scctcust::query()
-            ->leftJoinSub($saldoSrc['query'], 'trx', function ($join) use ($saldoSrc) {
-                if ($saldoSrc['join'] === 'NOCUST') {
-                    $join->on('trx.NOCUST', '=', 'scctcust.NOCUST');
-                } else {
-                    $join->on('trx.CUSTID', '=', 'scctcust.CUSTID');
-                }
-            });
+        $query = $this->applySaldoJoin(scctcust::query(), $saldoSrc);
 
         if ($filterQuery) {
             $query->where(function ($q) use ($filterQuery) {
@@ -487,9 +537,9 @@ class SaldoVirtualAccountController extends Controller
         $records = (clone $query)
             ->select($select)
             ->addSelect([
-                DB::raw('CASE WHEN COALESCE(trx.saldo, 0) > 0 THEN COALESCE(trx.saldo, 0) ELSE 0 END AS kredit'),
-                DB::raw('CASE WHEN COALESCE(trx.saldo, 0) < 0 THEN ABS(COALESCE(trx.saldo, 0)) ELSE 0 END AS debet'),
-                DB::raw('COALESCE(trx.saldo, 0) AS saldo'),
+                DB::raw('CASE WHEN ' . $saldoExpr . ' > 0 THEN ' . $saldoExpr . ' ELSE 0 END AS kredit'),
+                DB::raw('CASE WHEN ' . $saldoExpr . ' < 0 THEN ABS(' . $saldoExpr . ') ELSE 0 END AS debet'),
+                DB::raw($saldoExpr . ' AS saldo'),
             ])
             ->orderBy($columnName, $columnSortOrder)
             ->skip($start)
@@ -687,17 +737,23 @@ class SaldoVirtualAccountController extends Controller
         }
 
         $src = $this->saldoVaSource();
-        $query = (clone $src['query']);
 
-        if ($src['join'] === 'NOCUST') {
-            $nocust = scctcust::query()->where('CUSTID', $custId)->value('NOCUST');
-            if (blank($nocust)) {
+        if (($src['mode'] ?? '') === 'view') {
+            $joinCol = $src['join'] === 'NOCUST' ? 'NOCUST' : 'CUSTID';
+            $lookup = $joinCol === 'NOCUST'
+                ? scctcust::query()->where('CUSTID', $custId)->value('NOCUST')
+                : $custId;
+            if (blank($lookup)) {
                 return 0;
             }
-            $query->where('NOCUST', $nocust);
-        } else {
-            $query->where('CUSTID', $custId);
+
+            return (int) DB::connection('DATA_MYSQL')
+                ->table('v_saldo_va')
+                ->where($joinCol, $lookup)
+                ->value($src['saldo']);
         }
+
+        $query = $this->saldoTranAggregateQuery()->where('CUSTID', $custId);
 
         return (int) $query->value('saldo');
     }
