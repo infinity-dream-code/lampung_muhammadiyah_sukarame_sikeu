@@ -525,11 +525,13 @@ class UploadTagihanExcelController extends Controller
 
     private function bumpDataTagihanCache(): void
     {
-        $key = Str::slug('data_tagihan').'_cache_version';
-        if (!Cache::has($key)) {
-            Cache::forever($key, 1);
+        foreach (['data_tagihan', 'data tagihan lunas scctbill'] as $cacheName) {
+            $key = Str::slug($cacheName).'_cache_version';
+            if (!Cache::has($key)) {
+                Cache::forever($key, 1);
+            }
+            Cache::increment($key);
         }
-        Cache::increment($key);
     }
 
     public function clear()
