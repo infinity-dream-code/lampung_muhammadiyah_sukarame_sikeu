@@ -175,10 +175,15 @@
             </table>
         </div>
 
-        <div class="card-footer d-flex justify-content-end gap-2 border-top">
+        <div class="card-footer d-flex justify-content-end gap-2 border-top flex-wrap">
             <button type="button" class="btn btn-outline-danger js-clear-import">
                 <span class="ri-delete-bin-line me-2"></span>
                 Clear
+            </button>
+            <button type="button" class="btn btn-success" data-bs-toggle="modal"
+                    data-bs-target="#modal-validate-lunas" title="Khusus penginputan tagihan yang sudah lunas">
+                <span class="ri-checkbox-circle-line me-2"></span>
+                Simpan Auto Lunas
             </button>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal"
                     data-bs-target="#modal-validate">
@@ -277,6 +282,47 @@
                                 </div>
                                 <div class="col">
                                     <input type="submit" value="Simpan Data" class="btn btn-primary w-100">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <form id="formValidateLunas" class="mainForm" method="POST">
+        <div class="modal modal-blur fade" id="modal-validate-lunas" tabindex="-1" role="dialog" aria-hidden="true"
+             data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-status bg-success"></div>
+                    <div class="modal-header">
+                        <div class="modal-title">
+                            Simpan Auto Lunas
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body py-4">
+                        <div class="row mb-3 text-center">
+                            <span class="ri-checkbox-circle-line ri-48px text-success"></span>
+                            <h3>Simpan tagihan sebagai lunas?</h3>
+                            <div class="text-muted">
+                                Khusus penginputan tagihan yang <strong>sudah lunas</strong>.
+                                Tagihan dibuat langsung <strong>PAIDST = 1</strong> di <code>scctbill</code>,
+                                tanpa transaksi di <code>sccttran</code>.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer ">
+                        <div class="w-100">
+                            <div class="row">
+                                <div class="col">
+                                    <input type="reset" class="btn btn-outline-secondary w-100" value="Batal"
+                                           data-bs-dismiss="modal">
+                                </div>
+                                <div class="col">
+                                    <input type="submit" value="Simpan Auto Lunas" class="btn btn-success w-100">
                                 </div>
                             </div>
                         </div>
@@ -468,14 +514,17 @@
                         url = '{{route('admin.keuangan.tagihan-siswa.upload-tagihan-excel.store')}}';
                         method = 'POST';
                         formData = appendImportFileToFormData(formData);
-                    } else if (formId === "formValidate") {
+                    } else if (formId === "formValidate" || formId === "formValidateLunas") {
                         let form = document.getElementById('filterForm');
                         formData = new FormData(form);
                         // Pastikan nilai Select2 ikut terkirim
                         formData.set('tagihan', $('#tagihan').val() || '');
                         formData.set('periode_tahun', $('#periode_tahun').val() || '');
                         formData.set('periode_bulan', $('#periode_bulan').val() || '');
-                        loadingAlert('Menyimpan data tagihan');
+                        formData.set('auto_lunas', formId === "formValidateLunas" ? '1' : '0');
+                        loadingAlert(formId === "formValidateLunas"
+                            ? 'Menyimpan tagihan auto lunas'
+                            : 'Menyimpan data tagihan');
                         url = '{{route('admin.keuangan.tagihan-siswa.upload-tagihan-excel.validate-excel')}}';
                         method = 'POST';
                     }

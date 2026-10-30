@@ -233,6 +233,7 @@ class UploadTagihanExcelController extends Controller
 
         $nmTagihan = trim((string) $tagihan->tagihan);
         $isNyicil = (string) ((int) ($tagihan->isINSTALLMENT ?? 0));
+        $autoLunas = $request->boolean('auto_lunas');
 
         // Semua jenis tagihan: tahun + bulan (contoh 202609).
         $bta = sprintf('%04d%02d', (int) $request->periode_tahun, (int) $request->periode_bulan);
@@ -272,25 +273,28 @@ class UploadTagihanExcelController extends Controller
                     continue;
                 }
 
-                try {
-                    InputTagihanProcedure::call(
-                        (string) $siswa->NOCUST,
-                        $nominal,
-                        $nmTagihan,
-                        $bta,
-                        $bta,
-                        $isNyicil,
-                    );
-                } catch (\Throwable $e) {
-                    Log::warning('input-tagihan.procedure.fail_fallback', [
-                        'nocust' => $nocust,
-                        'message' => $e->getMessage(),
-                    ]);
-                }
+                if ($autoLunas) {
+                    $this->createTagihanDirect($siswa, $nominal, $nmTagihan, $bta, $isNyicil, true);
+                } else {
+                    try {
+                        InputTagihanProcedure::call(
+                            (string) $siswa->NOCUST,
+                            $nominal,
+                            $nmTagihan,
+                            $bta,
+                            $bta,
+                            $isNyicil,
+                        );
+                    } catch (\Throwable $e) {
+                        Log::warning('input-tagihan.procedure.fail_fallback', [
+                            'nocust' => $nocust,
+                            'message' => $e->getMessage(),
+                        ]);
+                    }
 
-                // Pastikan baris benar-benar ada (SP kadang sukses tanpa insert)
-                if (!$this->tagihanExistsForSiswa((int) $siswa->CUSTID, $nmTagihan, $bta)) {
-                    $this->createTagihanDirect($siswa, $nominal, $nmTagihan, $bta, $isNyicil);
+                    if (!$this->tagihanExistsForSiswa((int) $siswa->CUSTID, $nmTagihan, $bta)) {
+                        $this->createTagihanDirect($siswa, $nominal, $nmTagihan, $bta, $isNyicil, false);
+                    }
                 }
 
                 if (!$this->tagihanExistsForSiswa((int) $siswa->CUSTID, $nmTagihan, $bta)) {
@@ -298,12 +302,14 @@ class UploadTagihanExcelController extends Controller
                     continue;
                 }
 
-                NewBillFlags::normalize(
-                    (int) $siswa->CUSTID,
-                    $nmTagihan,
-                    $bta,
-                    (int) $isNyicil === 1 ? 1 : 0
-                );
+                if (!$autoLunas) {
+                    NewBillFlags::normalize(
+                        (int) $siswa->CUSTID,
+                        $nmTagihan,
+                        $bta,
+                        (int) $isNyicil === 1 ? 1 : 0
+                    );
+                }
 
                 $this->ensureBillDetailForSiswa(
                     (int) $siswa->CUSTID,
@@ -312,6 +318,10 @@ class UploadTagihanExcelController extends Controller
                     $nominal,
                     $tagihan->kodeAkun()
                 );
+
+                if ($autoLunas) {
+                    $this->markBillsAsLunas((int) $siswa->CUSTID, $nmTagihan, $bta);
+                }
 
                 $insertedCount++;
             }
@@ -327,7 +337,9 @@ class UploadTagihanExcelController extends Controller
                 ], 422);
             }
 
-            $message = "Data tagihan disimpan. Berhasil dibuat untuk {$insertedCount} siswa.";
+            $message = $autoLunas
+                ? "Data tagihan auto lunas disimpan. Berhasil dibuat (PAIDST=1, tanpa sccttran) untuk {$insertedCount} siswa."
+                : "Data tagihan disimpan. Berhasil dibuat untuk {$insertedCount} siswa.";
             if (!empty($skippedInactive)) {
                 $message .= '<hr>Tagihan tidak dibuat untuk siswa nonaktif: '.count($skippedInactive).' siswa.<br>'.
                     implode('<br>', $skippedInactive);
@@ -369,8 +381,14 @@ class UploadTagihanExcelController extends Controller
             ->exists();
     }
 
-    private function createTagihanDirect(scctcust $siswa, int $nominal, string $billNm, string $billac, string $isNyicil): void
-    {
+    private function createTagihanDirect(
+        scctcust $siswa,
+        int $nominal,
+        string $billNm,
+        string $billac,
+        string $isNyicil,
+        bool $autoLunas = false,
+    ): void {
         $custId = (int) $siswa->CUSTID;
         $existing = scctbill::query()
             ->where('CUSTID', $custId)
@@ -381,7 +399,16 @@ class UploadTagihanExcelController extends Controller
 
         if ($existing) {
             $existing->increment('BILLAM', $nominal);
-            if ($existing->PAYMENTLEFT !== null) {
+            $existing->refresh();
+            if ($autoLunas) {
+                $billAm = (int) ($existing->BILLAM ?? 0);
+                $existing->update([
+                    'BILLPAID' => $billAm,
+                    'PAYMENTLEFT' => 0,
+                    'PAIDST' => 1,
+                    'PAIDDT' => Carbon::now(),
+                ]);
+            } elseif ($existing->PAYMENTLEFT !== null) {
                 $existing->increment('PAYMENTLEFT', $nominal);
             } else {
                 $existing->update([
@@ -409,10 +436,10 @@ class UploadTagihanExcelController extends Controller
             'BILLAC' => $billac,
             'BILLNM' => $billNm,
             'BILLAM' => $nominal,
-            'BILLPAID' => 0,
-            'PAYMENTLEFT' => $nominal,
-            'PAIDST' => 0,
-            'PAIDDT' => null,
+            'BILLPAID' => $autoLunas ? $nominal : 0,
+            'PAYMENTLEFT' => $autoLunas ? 0 : $nominal,
+            'PAIDST' => $autoLunas ? 1 : 0,
+            'PAIDDT' => $autoLunas ? Carbon::now() : null,
             'FSTSBolehBayar' => 1,
             'FUrutan' => $newUrut,
             'FTGLTagihan' => Carbon::now(),
@@ -430,7 +457,32 @@ class UploadTagihanExcelController extends Controller
             'billnm' => $billNm,
             'billac' => $billac,
             'nominal' => $nominal,
+            'auto_lunas' => $autoLunas,
         ]);
+    }
+
+    private function markBillsAsLunas(int $custId, string $billNm, string $billac): void
+    {
+        $now = Carbon::now();
+        $bills = scctbill::query()
+            ->where('CUSTID', $custId)
+            ->where('FSTSBolehBayar', 1)
+            ->where('BILLNM', $billNm)
+            ->where(function ($q) use ($billac) {
+                $q->where('BILLAC', $billac)
+                    ->orWhere('BTA', $billac);
+            })
+            ->get();
+
+        foreach ($bills as $bill) {
+            $billAm = (int) ($bill->BILLAM ?? 0);
+            $bill->update([
+                'PAIDST' => 1,
+                'BILLPAID' => $billAm,
+                'PAYMENTLEFT' => 0,
+                'PAIDDT' => $now,
+            ]);
+        }
     }
 
     private function ensureBillDetailForSiswa(int $custId, string $billNm, string $billac, int $nominal, string $kodePost): void
