@@ -4,12 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\scctbill;
-use App\Models\scctcust;
 use App\Models\sccttran;
 use App\Support\SchoolScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
@@ -35,17 +33,13 @@ class AdminController extends Controller
 
         $today = Carbon::now();
 
-        $taighanDibayar = $this->scopedBillQuery($schoolCode)->select(
+        $taighanDibayar = $this->scopedPaymentTranQuery($schoolCode)->select(
             [
-                DB::raw('DATE(PAIDDT) as date'),
+                DB::raw('DATE(sccttran.TRXDATE) as date'),
                 DB::raw('COUNT(*) as count')
             ])
-            ->where('PAIDST', 1)
-            ->where('FSTSBolehBayar', 1)
-            ->whereNotNull('PAIDDT')
-            ->where('PAIDDT', '>=', Carbon::now()->subDays(7)->startOfDay())
-            ->where('PAIDDT', '!=', '0000-00-00 00:00:00')
-            ->groupBy(DB::raw('DATE(PAIDDT)'))
+            ->where('sccttran.TRXDATE', '>=', Carbon::now()->subDays(7)->startOfDay())
+            ->groupBy(DB::raw('DATE(sccttran.TRXDATE)'))
             ->orderBy('date', 'ASC')
             ->get();
 
@@ -79,10 +73,8 @@ class AdminController extends Controller
             12 => 'Desember',
         ];
 
-        $tahunTersedia = $this->scopedBillQuery($schoolCode)->where('PAIDST', 1)
-            ->where('FSTSBolehBayar', 1)
-            ->whereNotNull('PAIDDT')
-            ->selectRaw('YEAR(PAIDDT) as tahun')
+        $tahunTersedia = $this->scopedPaymentTranQuery($schoolCode)
+            ->selectRaw('YEAR(sccttran.TRXDATE) as tahun')
             ->distinct()
             ->orderBy('tahun', 'desc')
             ->pluck('tahun')
@@ -96,15 +88,12 @@ class AdminController extends Controller
             $tahunDipilih = $tahunTersedia[0] ?? Carbon::now()->year;
         }
 
-        $tagihanDibayarBulanan = $this->scopedBillQuery($schoolCode)->select([
-                DB::raw('MONTH(PAIDDT) as bulan'),
+        $tagihanDibayarBulanan = $this->scopedPaymentTranQuery($schoolCode)->select([
+                DB::raw('MONTH(sccttran.TRXDATE) as bulan'),
                 DB::raw('COUNT(*) as count'),
             ])
-            ->whereYear('PAIDDT', $tahunDipilih)
-            ->where('PAIDST', 1)
-            ->where('FSTSBolehBayar', 1)
-            ->whereNotNull('PAIDDT')
-            ->groupBy(DB::raw('MONTH(PAIDDT)'))
+            ->whereYear('sccttran.TRXDATE', $tahunDipilih)
+            ->groupBy(DB::raw('MONTH(sccttran.TRXDATE)'))
             ->orderBy('bulan', 'ASC')
             ->get()
             ->keyBy('bulan');
@@ -122,34 +111,38 @@ class AdminController extends Controller
         $data['chartTagihanDibayarBulanan'] = $chartTagihanDibayarBulanan;
         $data['tahun_tahun'] = $tahunTersedia;
         $data['tahun_dipilih'] = $tahunDipilih;
-        $recentPaid = scctbill::leftJoin('scctcust', 'scctcust.CUSTID', 'scctbill.CUSTID')
+
+        $data['tagihan_baru_dibayar'] = $this->scopedPaymentTranQuery($schoolCode)
             ->select([
+                'sccttran.urut',
+                'sccttran.TRXDATE',
+                'sccttran.DEBET',
+                'sccttran.BILLTARGET',
+                'sccttran.BILLID',
                 'scctbill.AA',
-                'scctbill.CUSTID',
                 'scctbill.BILLNM',
                 'scctbill.BILLAM',
-                'scctbill.PAIDST',
-                'scctbill.PAIDDT',
-                'scctbill.TRANSNO',
                 'scctbill.BTA',
                 'scctbill.FIDBANK',
-                'scctbill.FUrutan',
                 'scctcust.nmcust as nama',
-                'scctcust.nocust',
+                'scctcust.nocust as nis',
                 'scctcust.CODE02',
                 'scctcust.DESC02',
                 'scctcust.DESC04',
-            ])->where('scctbill.PAIDST', 1)
-            ->where('scctbill.FSTSBolehBayar', 1)
-            ->where('scctcust.STCUST', 1)
-            ->when($schoolCode, fn ($q) => $q->where('scctcust.CODE01', $schoolCode))
-            ->orderByRaw('CASE WHEN scctbill.PAIDDT IS NULL OR scctbill.PAIDDT = \'0000-00-00 00:00:00\' THEN 1 ELSE 0 END')
-            ->orderByDesc('scctbill.PAIDDT')
-            ->orderByDesc('scctbill.AA')
-            ->take(20)
-            ->get();
+            ])
+            ->orderByDesc('sccttran.TRXDATE')
+            ->orderByDesc('sccttran.urut')
+            ->take(5)
+            ->get()
+            ->map(function ($item) {
+                $item->BILLNM = $item->BILLNM ?: $item->BILLTARGET;
+                $item->BILLAM = (int) ($item->DEBET ?? 0) > 0
+                    ? (int) $item->DEBET
+                    : (int) ($item->BILLAM ?? 0);
+                $item->PAIDDT_DISPLAY = $this->formatPaidDateDisplay($item->TRXDATE);
 
-        $data['tagihan_baru_dibayar'] = $this->hydrateRecentPaidDates($recentPaid)->take(5)->values();
+                return $item;
+            });
 
         $data['jumlah_tagihan_belum_dibayar'] = $this->scopedBillQuery($schoolCode)->where('PAIDST', 0)->count('AA') ?: 0;
         $data['jumlah_tagihan_dibayar'] = $this->scopedBillQuery($schoolCode)->where('PAIDST', 1)->count('AA') ?: 0;
@@ -169,86 +162,34 @@ class AdminController extends Controller
         });
     }
 
-    private function hydrateRecentPaidDates(Collection $rows): Collection
+    private function scopedPaymentTranQuery(?string $schoolCode = null)
     {
-        if ($rows->isEmpty()) {
-            return $rows;
-        }
-
-        $missingAa = $rows
-            ->filter(fn ($row) => $this->isBlankPaidDate($row->PAIDDT ?? null))
-            ->pluck('AA')
-            ->filter()
-            ->map(fn ($aa) => (string) $aa)
-            ->unique()
-            ->values()
-            ->all();
-
-        $trxDates = [];
-        if ($missingAa !== []) {
-            $trxDates = sccttran::query()
-                ->whereIn('BILLID', $missingAa)
-                ->where(function ($q) {
-                    $q->whereNull('isreversal')
-                        ->orWhere('isreversal', 0)
-                        ->orWhere('isreversal', '0');
-                })
-                ->where(function ($q) {
-                    $q->whereRaw('CAST(COALESCE(DEBET, 0) AS SIGNED) > 0')
-                        ->orWhereRaw('CAST(COALESCE(KREDIT, 0) AS SIGNED) > 0');
-                })
-                ->selectRaw('BILLID, MAX(TRXDATE) as last_trx')
-                ->groupBy('BILLID')
-                ->pluck('last_trx', 'BILLID')
-                ->mapWithKeys(fn ($date, $billId) => [(string) $billId => $date])
-                ->all();
-        }
-
-        foreach ($rows as $row) {
-            $aa = (string) ($row->AA ?? '');
-            $paidDt = $row->PAIDDT ?? null;
-
-            if ($this->isBlankPaidDate($paidDt) && isset($trxDates[$aa])) {
-                $paidDt = $trxDates[$aa];
-                $row->PAIDDT = $paidDt;
-
-                scctbill::query()
-                    ->where('AA', $row->AA)
-                    ->where(function ($q) {
-                        $q->whereNull('PAIDDT')
-                            ->orWhere('PAIDDT', '0000-00-00 00:00:00');
-                    })
-                    ->update(['PAIDDT' => $paidDt]);
-            }
-
-            $row->PAIDDT_DISPLAY = $this->formatPaidDateDisplay($paidDt);
-            $row->PAIDDT_SORT = $this->isBlankPaidDate($paidDt)
-                ? null
-                : Carbon::parse($paidDt)->timestamp;
-        }
-
-        return $rows
-            ->sortByDesc(fn ($row) => $row->PAIDDT_SORT ?? 0)
-            ->values();
-    }
-
-    private function isBlankPaidDate(mixed $value): bool
-    {
-        if ($value === null) {
-            return true;
-        }
-
-        $normalized = trim((string) $value);
-
-        return $normalized === ''
-            || $normalized === '-'
-            || $normalized === '0'
-            || preg_match('/^0{4}-0{2}-0{2}/', $normalized) === 1;
+        return sccttran::query()
+            ->leftJoin('scctcust', 'scctcust.CUSTID', '=', 'sccttran.CUSTID')
+            ->leftJoin('scctbill', function ($join) {
+                $join->on('scctbill.AA', '=', 'sccttran.BILLID')
+                    ->on('scctbill.CUSTID', '=', 'sccttran.CUSTID');
+            })
+            ->where(function ($q) {
+                $q->whereNull('sccttran.isreversal')
+                    ->orWhere('sccttran.isreversal', 0)
+                    ->orWhere('sccttran.isreversal', '0');
+            })
+            ->whereRaw('CAST(COALESCE(sccttran.DEBET, 0) AS SIGNED) > 0')
+            ->whereNotNull('sccttran.TRXDATE')
+            ->where('sccttran.TRXDATE', '!=', '0000-00-00 00:00:00')
+            ->whereRaw('CAST(COALESCE(scctcust.STCUST, 0) AS SIGNED) = 1')
+            ->when($schoolCode, fn ($q) => $q->where('scctcust.CODE01', $schoolCode));
     }
 
     private function formatPaidDateDisplay(mixed $value): ?string
     {
-        if ($this->isBlankPaidDate($value)) {
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = trim((string) $value);
+        if ($normalized === '' || $normalized === '-' || preg_match('/^0{4}-0{2}-0{2}/', $normalized) === 1) {
             return null;
         }
 
