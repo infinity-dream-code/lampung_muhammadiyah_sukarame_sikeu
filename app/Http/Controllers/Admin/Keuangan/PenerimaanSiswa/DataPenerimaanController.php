@@ -31,7 +31,7 @@ class DataPenerimaanController extends Controller
     public ?string $sekolah = null;
     private string $title = 'Keuangan';
     private string $mainTitle = 'Data Pembayaran';
-    private string $cacheKey = 'data tagihan lunas scctbill';
+    private string $cacheKey = 'data tagihan lunas scctbill v2';
     private array $allowedFilters = [
         'dari_tanggal' => 'scctbill.PAIDDT_start',
         'sampai_tanggal' => 'scctbill.PAIDDT_end',
@@ -237,9 +237,24 @@ class DataPenerimaanController extends Controller
                         }
                         break;
                     case 'scctcust.nmcust':
-                        $val = is_numeric($val) ? $val : '%' . $val . '%';
-                        $colName = is_numeric($val) ? 'scctcust.NOCUST' : $key;
-                        ($colName) && $filters[] = [$colName, 'like', $val];
+                    case 'scctcust.NMCUST':
+                        $raw = trim((string) $val);
+                        if ($raw === '') {
+                            break;
+                        }
+                        // Cari partial nama (case-insensitive). Kalau angka murni, anggap NIS.
+                        if (ctype_digit($raw)) {
+                            $filters[] = ['scctcust.NOCUST', 'like', '%' . $raw . '%'];
+                        } else {
+                            $filters[] = ['scctcust.NMCUST', 'like', '%' . $raw . '%'];
+                        }
+                        break;
+                    case 'scctcust.nocust':
+                    case 'scctcust.NOCUST':
+                        $raw = trim((string) $val);
+                        if ($raw !== '') {
+                            $filters[] = ['scctcust.NOCUST', 'like', '%' . $raw . '%'];
+                        }
                         break;
                     case 'sccttran.FIDBANK':
                         if ((string) $val === MetodeBayarHelper::ANDROID_FIDBANK) {
