@@ -32,7 +32,6 @@
     <script src="{{asset('main/libs/select2/select2.min.js')}}"></script>
     <script>
         const dtOptions = { tableId: 'main_table', formId: false, columnUrl: '{{ $columnsUrl }}', dataUrl: '{{ $datasUrl }}', dataColumns: [], thead: true, paging: true, searching: true, pageLength: 10, order: [[1, 'desc']] };
-        const reverseUrl = '{{ route('admin.pencatatan-sederhana.kas-masuk.reverse', ':id') }}';
         document.addEventListener('DOMContentLoaded', function () {
             $('#kode_akun').select2({ dropdownParent: $('#modal-create'), width: '100%' });
             const tanggal = document.querySelector('#addForm [name="tanggal"]');
@@ -40,50 +39,6 @@
                 tanggal.addEventListener('change', function () { this.blur(); });
             }
             if (dtOptions.dataUrl && dtOptions.columnUrl) getDT(dtOptions);
-
-            document.querySelector('#main_table tbody').addEventListener('click', async function (e) {
-                const btn = e.target.closest('.btn-reversal-jurnal');
-                if (!btn) return;
-                e.preventDefault();
-                const rowEl = btn.closest('tr');
-                const rowData = DT[`${dtOptions.tableId}`]?.row(rowEl)?.data();
-                const urut = rowData?.urut;
-                if (!urut) {
-                    errorAlert('Data jurnal tidak ditemukan.');
-                    return;
-                }
-                const confirm = await Swal.fire({
-                    icon: 'warning',
-                    title: 'Reversal kas masuk?',
-                    html: `No bukti: <strong>${rowData.no_bukti || '-'}</strong><br>Nominal: <strong>Rp. ${Number(rowData.kredit || 0).toLocaleString('id-ID')}</strong><br><small>Baris asli tetap ada. Sistem membuat jurnal lawan (debet).</small>`,
-                    showCancelButton: true,
-                    confirmButtonText: 'Ya, reversal',
-                    cancelButtonText: 'Batal',
-                    confirmButtonColor: '#ff9f43',
-                });
-                if (!confirm.isConfirmed) return;
-
-                loadingAlert('Memproses reversal...');
-                const csrf = document.querySelector('meta[name="csrf-token"]').content;
-                const fd = new FormData();
-                fd.append('_token', csrf);
-                fetch(reverseUrl.replace(':id', urut), {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': csrf,
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: fd,
-                })
-                    .then(r => r.json().then(body => ({ ok: r.ok, body })).catch(() => ({ ok: false, body: {} })))
-                    .then(({ ok, body }) => {
-                        if (!ok) throw body;
-                        successAlert(body.message || 'Reversal berhasil');
-                        dataReload('main_table');
-                    })
-                    .catch(err => errorAlert(err.message || err.error || 'Gagal reversal'));
-            });
         });
     </script>
     <form id="addForm" class="mainForm">

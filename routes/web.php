@@ -278,7 +278,6 @@ Route::prefix("admin")
                         Route::get("get-data", "getData")->name("get-data");
                         Route::get("get-column", "getColumn")->name("get-column");
                         Route::post("/", "store")->name("store");
-                        Route::post("{id}/reverse", "reverse")->name("reverse");
                         Route::delete("{id}", "destroy")->name("destroy");
                     });
 
