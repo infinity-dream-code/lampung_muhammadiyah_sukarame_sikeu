@@ -71,6 +71,22 @@ class KasMasukController extends Controller
             ['data' => 'NamaAkunMasuk', 'name' => 'Akun Kas Masuk', 'searchable' => true, 'orderable' => true],
             ['data' => 'sumber_kas', 'name' => 'Sumber Kas', 'searchable' => true, 'orderable' => true],
             ['data' => 'periode', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
+            // Tombol hapus disembunyikan sementara (route destroy tetap ada).
+            // [
+            //     'data' => 'hapus',
+            //     'name' => '',
+            //     'orderable' => false,
+            //     'searchable' => false,
+            //     'dataVal' => false,
+            //     'columnType' => 'button',
+            //     'className' => 'text-center',
+            //     'button' => 'action',
+            //     'buttonText' => 'Hapus',
+            //     'buttonClass' => 'btn btn-sm btn-outline-danger btn-hapus-jurnal',
+            //     'buttonIcon' => 'ri-delete-bin-line me-1',
+            //     'buttonLink' => '#',
+            //     'exportable' => false,
+            // ],
         ];
     }
 
@@ -150,6 +166,7 @@ class KasMasukController extends Controller
                     );
                     $row['kredit'] = (int) ($row['kredit'] ?? 0);
                     $row['sumber_kas'] = trim((string) ($row['no_ref'] ?? '')) ?: '-';
+                    $row['hapus'] = $this->canDeleteJurnalRow($row['tahun'] ?? null, $item->periode ?? null);
                     $row['periode'] = PencatatanPeriode::label($row['periode'] ?? '', $row['tahun'] ?? '');
                     return $row;
                 })
@@ -245,6 +262,19 @@ class KasMasukController extends Controller
             DB::connection('DATA_MYSQL')->rollBack();
             Log::error('KasMasuk store failed', ['message' => $e->getMessage()]);
             return response()->json(['message' => 'Kas masuk gagal disimpan: ' . $e->getMessage(), 'error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function destroy($id)
+    {
+        try {
+            $this->destroyJurnalByUrut((int) $id, 'masuk');
+
+            return response()->json(['message' => 'Kas masuk berhasil dihapus']);
+        } catch (\Throwable $e) {
+            Log::warning('KasMasuk destroy failed', ['urut' => $id, 'message' => $e->getMessage()]);
+
+            return response()->json(['message' => $e->getMessage()], 422);
         }
     }
 

@@ -179,6 +179,11 @@
                         <div>Cek Pencatatan</div>
                     </a>
                 </li>
+                <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/tutup-buku*']) ? 'active' : '' }}">
+                    <a href="{{ route('admin.pencatatan-sederhana.tutup-buku.index') }}" class="menu-link">
+                        <div>Tutup Buku</div>
+                    </a>
+                </li>
                 <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/rekap-export-excel*']) ? 'active' : '' }}">
                     <a href="{{ route('admin.pencatatan-sederhana.rekap-export-excel.index') }}" class="menu-link">
                         <div>Rekap Export Excel</div>

@@ -6,6 +6,7 @@ use App\Models\akt_jurnal;
 use App\Support\CloudinaryUpload;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
+use App\Support\PencatatanPeriodeLock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -39,12 +40,48 @@ trait StoresJurnalKas
         return PencatatanPeriode::fromDate($tanggal);
     }
 
+    protected function assertJurnalPeriodOpen(string $tanggal): void
+    {
+        $period = $this->periodeFromDate($tanggal);
+        PencatatanPeriodeLock::assertOpen($period['tahun'], $period['periode']);
+    }
+
+    protected function canDeleteJurnalRow(mixed $tahun, mixed $periode): bool
+    {
+        return !PencatatanPeriodeLock::isLocked($tahun, $periode);
+    }
+
+    /**
+     * @param  'masuk'|'keluar'  $jenis
+     */
+    protected function destroyJurnalByUrut(int $urut, string $jenis): void
+    {
+        $row = akt_jurnal::query()->where('urut', $urut)->first();
+        if (!$row) {
+            throw new RuntimeException('Data jurnal tidak ditemukan.');
+        }
+
+        if ($jenis === 'masuk' && (int) ($row->kredit ?? 0) <= 0) {
+            throw new RuntimeException('Data bukan kas masuk.');
+        }
+        if ($jenis === 'keluar' && (int) ($row->debet ?? 0) <= 0) {
+            throw new RuntimeException('Data bukan kas keluar.');
+        }
+
+        PencatatanPeriodeLock::assertOpen($row->tahun ?? null, $row->periode ?? null);
+        $row->delete();
+    }
+
     /**
      * @param  array<string, mixed>  $extra
      */
     protected function insertJurnal(array $extra): akt_jurnal
     {
         PencatatanJurnalTable::ensureLedgerColumns();
+
+        if (!empty($extra['tanggal'])) {
+            $this->assertJurnalPeriodOpen((string) $extra['tanggal']);
+        }
 
         $payload = array_merge([
             'no_tran' => null,
