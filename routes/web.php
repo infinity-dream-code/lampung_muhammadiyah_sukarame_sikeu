@@ -292,14 +292,5 @@ Route::prefix("admin")
                         Route::delete("{id}", "destroy")->name("destroy");
                     });
 
-                Route::controller(\App\Http\Controllers\Admin\Pencatatan\TutupBukuController::class)
-                    ->prefix("tutup-buku")
-                    ->name("tutup-buku.")
-                    ->group(function () {
-                        Route::get("/", "index")->name("index");
-                        Route::post("tutup", "tutup")->name("tutup");
-                        Route::post("buka", "buka")->name("buka");
-                    });
-
             });
     });

@@ -7,7 +7,6 @@ use App\Support\CloudinaryUpload;
 use App\Support\PencatatanHapusLog;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
-use App\Support\PencatatanPeriodeLock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -41,15 +40,9 @@ trait StoresJurnalKas
         return PencatatanPeriode::fromDate($tanggal);
     }
 
-    protected function assertJurnalPeriodOpen(string $tanggal): void
-    {
-        $period = $this->periodeFromDate($tanggal);
-        PencatatanPeriodeLock::assertOpen($period['tahun'], $period['periode']);
-    }
-
     protected function canDeleteJurnalRow(mixed $tahun = null, mixed $periode = null): bool
     {
-        return !PencatatanPeriodeLock::isLocked($tahun, $periode);
+        return true;
     }
 
     protected function isReversalJurnalRow(object $row): bool
@@ -88,7 +81,7 @@ trait StoresJurnalKas
             return false;
         }
 
-        return $this->canDeleteJurnalRow($row->tahun ?? null, $row->periode ?? null);
+        return true;
     }
 
     /**
@@ -108,7 +101,6 @@ trait StoresJurnalKas
             throw new RuntimeException('Data bukan kas keluar.');
         }
 
-        PencatatanPeriodeLock::assertOpen($row->tahun ?? null, $row->periode ?? null);
         PencatatanHapusLog::write($jenis, $row);
         $row->delete();
     }
@@ -181,12 +173,6 @@ trait StoresJurnalKas
     protected function insertJurnal(array $extra): akt_jurnal
     {
         PencatatanJurnalTable::ensureLedgerColumns();
-
-        if (!empty($extra['tahun']) || !empty($extra['periode'])) {
-            PencatatanPeriodeLock::assertOpen($extra['tahun'] ?? null, $extra['periode'] ?? null);
-        } elseif (!empty($extra['tanggal'])) {
-            $this->assertJurnalPeriodOpen((string) $extra['tanggal']);
-        }
 
         $payload = array_merge([
             'no_tran' => null,
