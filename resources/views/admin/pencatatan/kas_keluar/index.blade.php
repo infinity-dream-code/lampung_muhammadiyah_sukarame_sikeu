@@ -32,7 +32,7 @@
     <script src="{{asset('main/libs/select2/select2.min.js')}}"></script>
     <script>
         const dtOptions = { tableId: 'main_table', formId: false, columnUrl: '{{ $columnsUrl }}', dataUrl: '{{ $datasUrl }}', dataColumns: [], thead: true, paging: true, searching: true, pageLength: 10, order: [[1, 'desc']] };
-        const reverseUrl = '{{ route('admin.pencatatan-sederhana.kas-keluar.reverse', ':id') }}';
+        const destroyUrl = '{{ route('admin.pencatatan-sederhana.kas-keluar.destroy', ':id') }}';
         document.addEventListener('DOMContentLoaded', function () {
             $('#kode_akun').select2({ dropdownParent: $('#modal-create'), width: '100%' });
             const tanggal = document.querySelector('#addForm [name="tanggal"]');
@@ -42,7 +42,7 @@
             if (dtOptions.dataUrl && dtOptions.columnUrl) getDT(dtOptions);
 
             document.querySelector('#main_table tbody').addEventListener('click', async function (e) {
-                const btn = e.target.closest('.btn-reversal-jurnal');
+                const btn = e.target.closest('.btn-hapus-jurnal');
                 if (!btn) return;
                 e.preventDefault();
                 const rowEl = btn.closest('tr');
@@ -54,35 +54,32 @@
                 }
                 const confirm = await Swal.fire({
                     icon: 'warning',
-                    title: 'Reversal kas keluar?',
-                    html: `No bukti: <strong>${rowData.no_bukti || '-'}</strong><br>Nominal: <strong>Rp. ${Number(rowData.debet || 0).toLocaleString('id-ID')}</strong><br><small>Baris asli tetap ada. Sistem membuat jurnal lawan (kredit).</small>`,
+                    title: 'Hapus kas keluar?',
+                    html: `No bukti: <strong>${rowData.no_bukti || '-'}</strong><br>Nominal: <strong>Rp. ${Number(rowData.debet || 0).toLocaleString('id-ID')}</strong><br><small>Data dihapus dari jurnal, tercatat di log penghapusan.</small>`,
                     showCancelButton: true,
-                    confirmButtonText: 'Ya, reversal',
+                    confirmButtonText: 'Ya, hapus',
                     cancelButtonText: 'Batal',
-                    confirmButtonColor: '#ff9f43',
+                    confirmButtonColor: '#dc3545',
                 });
                 if (!confirm.isConfirmed) return;
 
-                loadingAlert('Memproses reversal...');
+                loadingAlert('Menghapus kas keluar...');
                 const csrf = document.querySelector('meta[name="csrf-token"]').content;
-                const fd = new FormData();
-                fd.append('_token', csrf);
-                fetch(reverseUrl.replace(':id', urut), {
-                    method: 'POST',
+                fetch(destroyUrl.replace(':id', urut), {
+                    method: 'DELETE',
                     headers: {
                         'X-CSRF-TOKEN': csrf,
                         'Accept': 'application/json',
                         'X-Requested-With': 'XMLHttpRequest',
                     },
-                    body: fd,
                 })
                     .then(r => r.json().then(body => ({ ok: r.ok, body })).catch(() => ({ ok: false, body: {} })))
                     .then(({ ok, body }) => {
                         if (!ok) throw body;
-                        successAlert(body.message || 'Reversal berhasil');
+                        successAlert(body.message || 'Kas keluar berhasil dihapus');
                         dataReload('main_table');
                     })
-                    .catch(err => errorAlert(err.message || err.error || 'Gagal reversal'));
+                    .catch(err => errorAlert(err.message || err.error || 'Gagal menghapus'));
             });
         });
     </script>

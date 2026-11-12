@@ -181,7 +181,7 @@
                 </li>
                 <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/tutup-buku*']) ? 'active' : '' }}">
                     <a href="{{ route('admin.pencatatan-sederhana.tutup-buku.index') }}" class="menu-link">
-                        <div>Tutup Buku</div>
+                        <div>Simpan Jurnal Bulanan</div>
                     </a>
                 </li>
                 <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/rekap-export-excel*']) ? 'active' : '' }}">

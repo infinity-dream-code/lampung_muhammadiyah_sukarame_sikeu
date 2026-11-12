@@ -87,13 +87,15 @@ class PencatatanPeriodeLock
         }
 
         $label = PencatatanPeriode::label($periode, $tahun);
-        throw new \RuntimeException("Periode {$label} sudah ditutup. Tidak bisa menambah/menghapus jurnal.");
+        throw new \RuntimeException("Periode {$label} sudah disimpan/ditutup. Tidak bisa menambah/menghapus jurnal.");
     }
 
     public static function lock(string $tahun, string $periode): void
     {
         if (!self::ensureTable()) {
-            throw new \RuntimeException('Tabel kunci periode tidak tersedia.');
+            throw new \RuntimeException(
+                'Tabel akt_jurnal_periode_lock belum ada. Jalankan CREATE TABLE di Navicat terlebih dahulu.'
+            );
         }
 
         $tahunStr = self::normalizeTahun($tahun, $periode);

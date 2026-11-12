@@ -71,7 +71,21 @@ class KasMasukController extends Controller
             ['data' => 'NamaAkunMasuk', 'name' => 'Akun Kas Masuk', 'searchable' => true, 'orderable' => true],
             ['data' => 'sumber_kas', 'name' => 'Sumber Kas', 'searchable' => true, 'orderable' => true],
             ['data' => 'periode', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
-            // Reversal hanya di Kas Keluar. Hapus disembunyikan sementara.
+            [
+                'data' => 'hapus',
+                'name' => '',
+                'orderable' => false,
+                'searchable' => false,
+                'dataVal' => false,
+                'columnType' => 'button',
+                'className' => 'text-center',
+                'button' => 'action',
+                'buttonText' => 'Hapus',
+                'buttonClass' => 'btn btn-sm btn-outline-danger btn-hapus-jurnal',
+                'buttonIcon' => 'ri-delete-bin-line me-1',
+                'buttonLink' => '#',
+                'exportable' => false,
+            ],
         ];
     }
 

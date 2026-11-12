@@ -71,7 +71,7 @@ class KasKeluarController extends Controller
             ['data' => 'sumber_kas', 'name' => 'Sumber Kas', 'searchable' => true, 'orderable' => true],
             ['data' => 'periode', 'name' => 'Periode', 'searchable' => true, 'orderable' => true],
             [
-                'data' => 'reversal',
+                'data' => 'hapus',
                 'name' => '',
                 'orderable' => false,
                 'searchable' => false,
@@ -79,13 +79,12 @@ class KasKeluarController extends Controller
                 'columnType' => 'button',
                 'className' => 'text-center',
                 'button' => 'action',
-                'buttonText' => 'Reversal',
-                'buttonClass' => 'btn btn-sm btn-outline-warning btn-reversal-jurnal',
-                'buttonIcon' => 'ri-arrow-go-back-line me-1',
+                'buttonText' => 'Hapus',
+                'buttonClass' => 'btn btn-sm btn-outline-danger btn-hapus-jurnal',
+                'buttonIcon' => 'ri-delete-bin-line me-1',
                 'buttonLink' => '#',
                 'exportable' => false,
             ],
-            // Tombol hapus disembunyikan sementara (route destroy tetap ada).
         ];
     }
 
@@ -166,7 +165,6 @@ class KasKeluarController extends Controller
                     $row['debet'] = (int) ($row['debet'] ?? 0);
                     $row['sumber_kas'] = trim((string) ($row['no_ref'] ?? '')) ?: '-';
                     $row['hapus'] = $this->canDeleteJurnalRow($row['tahun'] ?? null, $item->periode ?? null);
-                    $row['reversal'] = $this->canReverseJurnalRow($item);
                     $row['periode'] = PencatatanPeriode::label($row['periode'] ?? '', $row['tahun'] ?? '');
                     return $row;
                 })
@@ -269,22 +267,4 @@ class KasKeluarController extends Controller
         }
     }
 
-    public function reverse($id)
-    {
-        try {
-            DB::connection('DATA_MYSQL')->beginTransaction();
-            $reversal = $this->reverseJurnalByUrut((int) $id, 'keluar');
-            DB::connection('DATA_MYSQL')->commit();
-
-            return response()->json([
-                'message' => 'Reversal kas keluar berhasil. Jurnal lawan: '.($reversal->no_bukti ?? '-'),
-                'no_bukti' => $reversal->no_bukti ?? null,
-            ]);
-        } catch (\Throwable $e) {
-            DB::connection('DATA_MYSQL')->rollBack();
-            Log::warning('KasKeluar reverse failed', ['urut' => $id, 'message' => $e->getMessage()]);
-
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
 }

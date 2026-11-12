@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Pencatatan\Concerns;
 
 use App\Models\akt_jurnal;
 use App\Support\CloudinaryUpload;
+use App\Support\PencatatanHapusLog;
 use App\Support\PencatatanJurnalTable;
 use App\Support\PencatatanPeriode;
 use App\Support\PencatatanPeriodeLock;
@@ -46,7 +47,7 @@ trait StoresJurnalKas
         PencatatanPeriodeLock::assertOpen($period['tahun'], $period['periode']);
     }
 
-    protected function canDeleteJurnalRow(mixed $tahun, mixed $periode): bool
+    protected function canDeleteJurnalRow(mixed $tahun = null, mixed $periode = null): bool
     {
         return !PencatatanPeriodeLock::isLocked($tahun, $periode);
     }
@@ -108,6 +109,7 @@ trait StoresJurnalKas
         }
 
         PencatatanPeriodeLock::assertOpen($row->tahun ?? null, $row->periode ?? null);
+        PencatatanHapusLog::write($jenis, $row);
         $row->delete();
     }
 
@@ -142,8 +144,6 @@ trait StoresJurnalKas
             throw new RuntimeException('Jurnal ini sudah pernah di-reversal.');
         }
 
-        PencatatanPeriodeLock::assertOpen($row->tahun ?? null, $row->periode ?? null);
-
         $nominal = $jenis === 'masuk'
             ? (int) ($row->kredit ?? 0)
             : (int) ($row->debet ?? 0);
@@ -172,17 +172,19 @@ trait StoresJurnalKas
             'kode_perkiraan' => $row->kode_perkiraan ?? null,
             'NamaAkunMasuk' => $jenis === 'keluar' ? ($row->NamaAkunKeluar ?? $row->NamaAkunMasuk ?? null) : ($row->NamaAkunMasuk ?? null),
             'NamaAkunKeluar' => $jenis === 'masuk' ? ($row->NamaAkunMasuk ?? $row->NamaAkunKeluar ?? null) : ($row->NamaAkunKeluar ?? null),
-        ], false);
+        ]);
     }
 
     /**
      * @param  array<string, mixed>  $extra
      */
-    protected function insertJurnal(array $extra, bool $assertPeriod = true): akt_jurnal
+    protected function insertJurnal(array $extra): akt_jurnal
     {
         PencatatanJurnalTable::ensureLedgerColumns();
 
-        if ($assertPeriod && !empty($extra['tanggal'])) {
+        if (!empty($extra['tahun']) || !empty($extra['periode'])) {
+            PencatatanPeriodeLock::assertOpen($extra['tahun'] ?? null, $extra['periode'] ?? null);
+        } elseif (!empty($extra['tanggal'])) {
             $this->assertJurnalPeriodOpen((string) $extra['tanggal']);
         }
 

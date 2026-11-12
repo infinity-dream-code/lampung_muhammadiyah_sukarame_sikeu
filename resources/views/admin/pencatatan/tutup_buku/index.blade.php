@@ -1,21 +1,21 @@
 @extends('layouts.admin_new')
 @section('content')
-    <h3 class="page-heading d-flex text-gray-900 fw-bold flex-column justify-content-center my-0">{{ $dataTitle ?? 'Tutup Buku' }}</h3>
+    <h3 class="page-heading d-flex text-gray-900 fw-bold flex-column justify-content-center my-0">{{ $dataTitle ?? 'Simpan Jurnal Per Bulan' }}</h3>
     <ul class="breadcrumb breadcrumb-style2">
         <li class="breadcrumb-item"><a href="{{ route('admin.index') }}" class="text-hover-primary">Beranda</a></li>
         <li class="breadcrumb-item">{{ $title ?? 'Pencatatan Sederhana' }}</li>
-        <li class="breadcrumb-item active">{{ $mainTitle ?? 'Tutup Buku' }}</li>
+        <li class="breadcrumb-item active">{{ $mainTitle ?? 'Simpan Jurnal Bulanan' }}</li>
     </ul>
 
     <div class="alert alert-info py-2">
-        Tutup buku mengunci <strong>tahun + bulan</strong> jurnal di <code>akt_jurnal</code>.
-        Setelah ditutup, Kas Masuk/Kas Keluar periode itu tidak bisa ditambah atau dihapus. Cek/Rekap tetap bisa dibaca.
+        Simpan jurnal per bulan mengunci <strong>tahun + bulan</strong> di pencatatan sederhana.
+        Setelah disimpan, Kas Masuk/Kas Keluar periode itu tidak bisa ditambah atau dihapus. Cek/Rekap tetap bisa dibaca.
     </div>
 
     <div class="row g-3">
         <div class="col-lg-5">
             <div class="card">
-                <div class="card-header"><h5 class="mb-0">Tutup / Buka Periode</h5></div>
+                <div class="card-header"><h5 class="mb-0">Simpan / Buka Periode</h5></div>
                 <div class="card-body">
                     <form id="form-tutup-buku">
                         <div class="mb-3">
@@ -36,7 +36,7 @@
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             <button type="button" class="btn btn-primary" id="btn-tutup">
-                                <i class="ri-lock-line me-1"></i> Tutup Buku
+                                <i class="ri-save-line me-1"></i> Simpan Jurnal Bulan Ini
                             </button>
                             <button type="button" class="btn btn-outline-warning" id="btn-buka">
                                 <i class="ri-lock-unlock-line me-1"></i> Buka Kembali
@@ -48,14 +48,14 @@
         </div>
         <div class="col-lg-7">
             <div class="card">
-                <div class="card-header"><h5 class="mb-0">Periode Tertutup</h5></div>
+                <div class="card-header"><h5 class="mb-0">Periode Sudah Disimpan</h5></div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0" id="table-locked">
                             <thead class="table-light">
                             <tr>
                                 <th>Periode</th>
-                                <th>Ditutup</th>
+                                <th>Disimpan</th>
                                 <th>Oleh</th>
                                 <th class="text-center">Aksi</th>
                             </tr>
@@ -77,7 +77,7 @@
                                 </tr>
                             @empty
                                 <tr class="js-empty-row">
-                                    <td colspan="4" class="text-center text-muted py-4">Belum ada periode yang ditutup.</td>
+                                    <td colspan="4" class="text-center text-muted py-4">Belum ada periode yang disimpan.</td>
                                 </tr>
                             @endforelse
                             </tbody>
@@ -105,7 +105,7 @@
             const tbody = document.querySelector('#table-locked tbody');
             if (!tbody) return;
             if (!Array.isArray(rows) || rows.length === 0) {
-                tbody.innerHTML = '<tr class="js-empty-row"><td colspan="4" class="text-center text-muted py-4">Belum ada periode yang ditutup.</td></tr>';
+                tbody.innerHTML = '<tr class="js-empty-row"><td colspan="4" class="text-center text-muted py-4">Belum ada periode yang disimpan.</td></tr>';
                 return;
             }
             tbody.innerHTML = rows.map(row => `
@@ -160,7 +160,7 @@
 
         document.getElementById('btn-tutup')?.addEventListener('click', function () {
             const body = payloadFromForm();
-            postLock(tutupUrl, body, 'Tutup buku periode ini?');
+            postLock(tutupUrl, body, 'Simpan jurnal periode ini?');
         });
 
         document.getElementById('btn-buka')?.addEventListener('click', function () {

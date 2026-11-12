@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\Validator;
 class TutupBukuController extends Controller
 {
     public string $title = 'Pencatatan Sederhana';
-    public string $mainTitle = 'Tutup Buku';
-    public string $dataTitle = 'Tutup Buku Bulanan';
+    public string $mainTitle = 'Simpan Jurnal Bulanan';
+    public string $dataTitle = 'Simpan Jurnal Per Bulan';
 
     public function index()
     {
@@ -59,14 +59,14 @@ class TutupBukuController extends Controller
         try {
             if (PencatatanPeriodeLock::isLocked($tahun, $periode)) {
                 return response()->json([
-                    'message' => 'Periode '.PencatatanPeriode::label($periode, $tahun).' sudah ditutup.',
+                    'message' => 'Periode '.PencatatanPeriode::label($periode, $tahun).' sudah disimpan/ditutup.',
                 ], 422);
             }
 
             PencatatanPeriodeLock::lock($tahun, $periode);
 
             return response()->json([
-                'message' => 'Periode '.PencatatanPeriode::label($periode, $tahun).' berhasil ditutup. Kas masuk/keluar periode ini tidak bisa ditambah/dihapus.',
+                'message' => 'Jurnal periode '.PencatatanPeriode::label($periode, $tahun).' berhasil disimpan. Kas masuk/keluar periode ini tidak bisa ditambah/dihapus.',
                 'lockedPeriods' => PencatatanPeriodeLock::listLocked(),
             ]);
         } catch (\Throwable $e) {
@@ -98,7 +98,7 @@ class TutupBukuController extends Controller
         try {
             if (!PencatatanPeriodeLock::isLocked($tahun, $periode)) {
                 return response()->json([
-                    'message' => 'Periode '.PencatatanPeriode::label($periode, $tahun).' belum ditutup.',
+                    'message' => 'Periode '.PencatatanPeriode::label($periode, $tahun).' belum disimpan/ditutup.',
                 ], 422);
             }
 
