@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -64,19 +65,25 @@ class PencatatanHapusLog
             );
         }
 
-        $data = is_array($row) ? $row : (array) $row;
-        $debet = (int) ($data['debet'] ?? 0);
-        $kredit = (int) ($data['kredit'] ?? 0);
+        $data = self::rowToArray($row);
+        $debet = (int) self::pick($data, ['debet', 'DEBET'], 0);
+        $kredit = (int) self::pick($data, ['kredit', 'KREDIT'], 0);
         $nominal = $jenis === 'masuk' ? $kredit : $debet;
         if ($nominal <= 0) {
             $nominal = max($debet, $kredit);
         }
 
-        $namaAkun = $jenis === 'masuk'
-            ? trim((string) ($data['NamaAkunMasuk'] ?? ''))
-            : trim((string) ($data['NamaAkunKeluar'] ?? ''));
+        $namaAkun = trim((string) (
+            $jenis === 'masuk'
+                ? self::pick($data, ['NamaAkunMasuk', 'namaakunmasuk', 'nama_akun_masuk'], '')
+                : self::pick($data, ['NamaAkunKeluar', 'namaakunkeluar', 'nama_akun_keluar'], '')
+        ));
         if ($namaAkun === '') {
-            $namaAkun = trim((string) ($data['NamaAkunMasuk'] ?? $data['NamaAkunKeluar'] ?? ''));
+            $namaAkun = trim((string) self::pick(
+                $data,
+                ['NamaAkunMasuk', 'NamaAkunKeluar', 'namaakunmasuk', 'namaakunkeluar'],
+                ''
+            ));
         }
 
         $user = Auth::user();
@@ -84,23 +91,82 @@ class PencatatanHapusLog
         $dihapusOlehId = trim((string) ($user->urut ?? $user->id ?? Auth::id() ?? ''));
 
         DB::connection('DATA_MYSQL')->table(self::TABLE)->insert([
-            'urut_asal' => isset($data['urut']) ? (int) $data['urut'] : null,
+            'urut_asal' => ($urut = self::pick($data, ['urut', 'URUT'], null)) !== null && $urut !== ''
+                ? (int) $urut
+                : null,
             'jenis' => $jenis,
-            'no_bukti' => trim((string) ($data['no_bukti'] ?? '')) ?: null,
-            'tanggal_jurnal' => self::normalizeDatetime($data['tanggal'] ?? null),
-            'keterangan' => trim((string) ($data['keterangan'] ?? '')) ?: null,
+            'no_bukti' => trim((string) self::pick($data, ['no_bukti', 'NO_BUKTI'], '')) ?: null,
+            'tanggal_jurnal' => self::normalizeDatetime(self::pick($data, ['tanggal', 'TANGGAL'], null)),
+            'keterangan' => trim((string) self::pick($data, ['keterangan', 'KETERANGAN'], '')) ?: null,
             'debet' => $debet,
             'kredit' => $kredit,
             'nominal' => $nominal,
-            'tahun' => trim((string) ($data['tahun'] ?? '')) ?: null,
-            'periode' => trim((string) ($data['periode'] ?? '')) ?: null,
-            'kode_akun' => trim((string) ($data['kode_perkiraan'] ?? '')) ?: null,
+            'tahun' => trim((string) self::pick($data, ['tahun', 'TAHUN'], '')) ?: null,
+            'periode' => trim((string) self::pick($data, ['periode', 'PERIODE'], '')) ?: null,
+            'kode_akun' => trim((string) self::pick($data, ['kode_perkiraan', 'KODE_PERKIRAAN'], '')) ?: null,
             'nama_akun' => $namaAkun !== '' ? $namaAkun : null,
-            'sumber_kas' => trim((string) ($data['no_ref'] ?? '')) ?: null,
+            'sumber_kas' => trim((string) self::pick($data, ['no_ref', 'NO_REF'], '')) ?: null,
             'dihapus_oleh' => $dihapusOleh !== '' ? $dihapusOleh : 'system',
             'dihapus_oleh_id' => $dihapusOlehId !== '' ? $dihapusOlehId : null,
             'dihapus_pada' => Carbon::now()->format('Y-m-d H:i:s'),
         ]);
+    }
+
+    /**
+     * @param  object|array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private static function rowToArray(object|array $row): array
+    {
+        if (is_array($row)) {
+            return $row;
+        }
+
+        if ($row instanceof Model) {
+            return $row->getAttributes();
+        }
+
+        if (method_exists($row, 'toArray')) {
+            /** @var array<string, mixed> $arr */
+            $arr = $row->toArray();
+
+            return $arr;
+        }
+
+        // Jangan pakai (array) $object — Eloquent jadi key \0*\0attributes.
+        $arr = [];
+        foreach (get_object_vars($row) as $key => $value) {
+            $arr[$key] = $value;
+        }
+
+        return $arr;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $keys
+     */
+    private static function pick(array $data, array $keys, mixed $default = null): mixed
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $data) && $data[$key] !== null && $data[$key] !== '') {
+                return $data[$key];
+            }
+        }
+
+        $lowerMap = [];
+        foreach ($data as $k => $v) {
+            $lowerMap[strtolower((string) $k)] = $v;
+        }
+
+        foreach ($keys as $key) {
+            $lk = strtolower($key);
+            if (array_key_exists($lk, $lowerMap) && $lowerMap[$lk] !== null && $lowerMap[$lk] !== '') {
+                return $lowerMap[$lk];
+            }
+        }
+
+        return $default;
     }
 
     private static function normalizeDatetime(mixed $value): ?string
