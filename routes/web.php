@@ -292,5 +292,14 @@ Route::prefix("admin")
                         Route::delete("{id}", "destroy")->name("destroy");
                     });
 
+                Route::controller(\App\Http\Controllers\Admin\Pencatatan\InputKasTopUpController::class)
+                    ->prefix("input-kas-top-up")
+                    ->name("input-kas-top-up.")
+                    ->group(function () {
+                        Route::get("/", "index")->name("index");
+                        Route::get("preview", "preview")->name("preview");
+                        Route::post("/", "store")->name("store");
+                    });
+
             });
     });
