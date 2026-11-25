@@ -39,11 +39,6 @@
         <li class="breadcrumb-item active">{{ $mainTitle ?? 'Input Kas Top Up' }}</li>
     </ul>
 
-    <div class="alert alert-info py-2">
-        Menu ini menyimpan transaksi <strong>scctran Top Up</strong> per periode ke <strong>akt_jurnal</strong> (Kas Masuk).
-        <strong>NOREFF</strong> tidak boleh dobel pada periode yang sama (disimpan di kolom <code>no_ref</code>).
-    </div>
-
     <div class="row g-3 mb-3">
         <div class="col-lg-5">
             <div class="card h-100">

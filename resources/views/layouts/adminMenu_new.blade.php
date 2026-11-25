@@ -174,11 +174,13 @@
                         <div>Kas Keluar</div>
                     </a>
                 </li>
+                {{-- Sementara disembunyikan; aktifkan lagi dengan uncomment block di bawah.
                 <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/input-kas-top-up*']) ? 'active' : '' }}">
                     <a href="{{ route('admin.pencatatan-sederhana.input-kas-top-up.index') }}" class="menu-link">
                         <div>Input Kas Top Up</div>
                     </a>
                 </li>
+                --}}
                 <li class="menu-item {{ Request::is(['admin/pencatatan-sederhana/cek-pencatatan*']) ? 'active' : '' }}">
                     <a href="{{ route('admin.pencatatan-sederhana.cek-pencatatan.index') }}" class="menu-link">
                         <div>Cek Pencatatan</div>
