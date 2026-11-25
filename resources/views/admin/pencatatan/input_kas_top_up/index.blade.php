@@ -26,8 +26,6 @@
         .badge-status-kosong,
         .badge-status-ganda { background: rgba(var(--bs-danger-rgb), .12); color: var(--bs-danger); }
         #table-preview td, #table-preview th { vertical-align: middle; }
-        tr.row-nominal-ganjil { background: rgba(var(--bs-warning-rgb), .12) !important; }
-        tr.row-nominal-ganjil td.text-nominal { font-weight: 700; color: #d59a00; }
     </style>
 @endsection
 
@@ -43,8 +41,6 @@
 
     <div class="alert alert-info py-2">
         Menu ini menyimpan transaksi <strong>scctran Top Up</strong> per periode ke <strong>akt_jurnal</strong> (Kas Masuk).
-        Dropdown <strong>Akun Kas Masuk</strong> hanya tujuan jurnal saat simpan — <strong>tidak memfilter</strong> daftar Top Up.
-        <strong>Nominal Total</strong> = jumlah semua <code>KREDIT</code> Top Up di periode itu.
         <strong>NOREFF</strong> tidak boleh dobel pada periode yang sama (disimpan di kolom <code>no_ref</code>).
     </div>
 
@@ -213,10 +209,6 @@
             if ((summary.sudah || 0) > 0) note.push(`${summary.sudah} sudah ada di jurnal`);
             if ((summary.empty_noreff || 0) > 0) note.push(`${summary.empty_noreff} tanpa NOREFF`);
             if ((summary.duplicate_in_source || 0) > 0) note.push(`${summary.duplicate_in_source} NOREFF ganda di sumber`);
-            const ganjil = (summary.rows || []).filter(r => Number(r.nominal || 0) % 1000 !== 0);
-            if (ganjil.length > 0) {
-                note.push(`${ganjil.length} nominal tidak bulat ribuan (baris kuning di preview)`);
-            }
             document.getElementById('summary-note').textContent = note.length
                 ? note.join(' · ')
                 : 'Tidak ada Top Up di periode ini.';
@@ -229,23 +221,16 @@
                 tbody.innerHTML = '<tr class="js-empty-row"><td colspan="6" class="text-center text-muted py-4">Tidak ada Top Up di periode ini.</td></tr>';
                 return;
             }
-            const sorted = [...rows].sort((a, b) => {
-                const aOdd = Number(a.nominal || 0) % 1000 !== 0 ? 0 : 1;
-                const bOdd = Number(b.nominal || 0) % 1000 !== 0 ? 0 : 1;
-                return aOdd - bOdd;
-            });
-            tbody.innerHTML = sorted.map(row => {
-                const odd = Number(row.nominal || 0) % 1000 !== 0;
-                return `
-                <tr class="${odd ? 'row-nominal-ganjil' : ''}">
+            tbody.innerHTML = rows.map(row => `
+                <tr>
                     <td>${row.tanggal || '-'}</td>
                     <td>${row.nis || '-'}</td>
                     <td>${row.nama || '-'}</td>
                     <td>${row.noreff || '-'}</td>
-                    <td class="text-end text-nominal">${rupiah(row.nominal)}</td>
+                    <td class="text-end">${rupiah(row.nominal)}</td>
                     <td class="text-center">${statusBadge(row.status)}</td>
-                </tr>`;
-            }).join('');
+                </tr>
+            `).join('');
         }
 
         async function fetchPreview() {
